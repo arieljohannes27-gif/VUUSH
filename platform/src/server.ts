@@ -6,7 +6,7 @@ async function main() {
   const app = await buildApp();
 
   try {
-    await ensureCatalogSeed(app.log);
+    // Listen first so Railway /health can pass even if DB seed is slow/fails.
     await app.listen({ host: env.HOST, port: env.PORT });
     app.log.info(
       { port: env.PORT, env: env.NODE_ENV },
@@ -16,6 +16,15 @@ async function main() {
     app.log.error(err);
     await dbPool.end();
     process.exit(1);
+  }
+
+  try {
+    await ensureCatalogSeed(app.log);
+  } catch (err) {
+    app.log.error(
+      { err },
+      "catalog seed failed — API is up; check DATABASE_URL / Supabase",
+    );
   }
 
   const shutdown = async (signal: string) => {
