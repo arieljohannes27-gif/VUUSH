@@ -3,9 +3,17 @@ import pg from "pg";
 import { env } from "../config.js";
 import * as schema from "./schema.js";
 
-const pool = new pg.Pool({
-  connectionString: env.DATABASE_URL,
-});
+function poolConfig(connectionString: string): pg.PoolConfig {
+  const needsSsl =
+    connectionString.includes("supabase.co") ||
+    connectionString.includes("sslmode=require");
+  return {
+    connectionString,
+    ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  };
+}
+
+const pool = new pg.Pool(poolConfig(env.DATABASE_URL));
 
 export const db = drizzle(pool, { schema });
 export const dbPool = pool;

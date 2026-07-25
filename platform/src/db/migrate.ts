@@ -15,7 +15,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.join(__dirname, "../../drizzle");
 
 async function main() {
-  const pool = new pg.Pool({ connectionString: databaseUrl });
+  const needsSsl =
+    databaseUrl.includes("supabase.co") ||
+    databaseUrl.includes("sslmode=require");
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
   const db = drizzle(pool);
 
   console.log("Running migrations from", migrationsFolder);
