@@ -1,0 +1,21 @@
+# Secrets & local
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# Dependencies & build
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+.data/
+.tmp/
+uploads/
+
+# Tooling
+.vercel
+.railway
+.supabase

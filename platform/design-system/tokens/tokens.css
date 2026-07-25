@@ -1,0 +1,33 @@
+/**
+ * SWIFT Design System v1.0 — single entry
+ * Import once at app root.
+ */
+@import "./colors.css";
+@import "./typography.css";
+@import "./spacing.css";
+@import "./elevation.css";
+
+:root {
+  --rail-width: 280px;
+  --detail-width: 320px;
+  --topbar-height: 64px;
+  --nav-height: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+  color: var(--swift-text);
+  background: var(--swift-bg);
+  font-family: var(--font-ui);
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--swift-bg);
+  color: var(--swift-text);
+}

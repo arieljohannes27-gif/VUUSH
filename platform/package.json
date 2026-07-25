@@ -1,0 +1,56 @@
+{
+  "name": "@swift/platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SWIFT Technologies modular platform — apps + Design System v1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "smoke:m1": "bash scripts/smoke-m1.sh",
+    "smoke:m3": "bash scripts/smoke-m3.sh",
+    "smoke:m8": "bash scripts/smoke-m8.sh",
+    "smoke:m4": "bash scripts/smoke-m4.sh",
+    "smoke:m5": "bash scripts/smoke-m5.sh",
+    "smoke:m6a": "bash scripts/smoke-m6a.sh",
+    "smoke:m6": "bash scripts/smoke-m6.sh",
+    "smoke:m2": "bash scripts/smoke-m2.sh",
+    "smoke:m8a": "bash scripts/smoke-m8a.sh",
+    "smoke:m8b": "bash scripts/smoke-m8b.sh",
+    "smoke:m8c": "bash scripts/smoke-m8c.sh",
+    "smoke:rc": "bash scripts/smoke-rc.sh",
+    "console:dispatch": "npm run dev --prefix apps/dispatch-console",
+    "console:driver": "npm run dev --prefix apps/driver-app",
+    "console:customer": "npm run dev --prefix apps/customer-app",
+    "console:support": "npm run dev --prefix apps/support-console",
+    "console:admin": "npm run dev --prefix apps/admin-console"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.44.2",
+    "fastify": "^5.4.0",
+    "pg": "^8.16.3",
+    "pino": "^9.7.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.32",
+    "@types/pg": "^8.15.4",
+    "drizzle-kit": "^0.31.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

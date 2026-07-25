@@ -1,0 +1,65 @@
+/**
+ * SWIFT Design System v1.0 — typography
+ * Primary: Inter · Fallback: system-ui
+ */
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-sans);
+  --font-ui: var(--font-sans);
+  --font-mono: "Inter", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --font-display-weight: 700;
+  --font-heading-weight: 600;
+  --font-body-weight: 400;
+  --font-button-weight: 500;
+  --font-caption-weight: 400;
+
+  --font-display-size: 36px;
+  --font-display-line: 1.15;
+  --font-heading-size: 24px;
+  --font-heading-line: 1.25;
+  --font-title-size: 28px;
+  --font-body-size: 16px;
+  --font-body-line: 1.5;
+  --font-button-size: 15px;
+  --font-caption-size: 13px;
+  --font-small-size: 13px;
+}
+
+.swift-display {
+  font-family: var(--font-display);
+  font-weight: var(--font-display-weight);
+  font-size: var(--font-display-size);
+  line-height: var(--font-display-line);
+  letter-spacing: -0.02em;
+  color: var(--swift-text);
+}
+
+.swift-heading {
+  font-family: var(--font-ui);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--font-heading-size);
+  line-height: var(--font-heading-line);
+  letter-spacing: -0.015em;
+  color: var(--swift-text);
+}
+
+.swift-body {
+  font-family: var(--font-ui);
+  font-weight: var(--font-body-weight);
+  font-size: var(--font-body-size);
+  line-height: var(--font-body-line);
+  color: var(--swift-text);
+}
+
+.swift-caption {
+  font-family: var(--font-ui);
+  font-weight: var(--font-caption-weight);
+  font-size: var(--font-caption-size);
+  line-height: 1.4;
+  color: var(--swift-text-muted);
+}
+
+.swift-tabular {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: swift-postgres-m0
+    restart: unless-stopped
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_USER: swift
+      POSTGRES_PASSWORD: swift
+      POSTGRES_DB: swift_platform
+    volumes:
+      - swift_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swift -d swift_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  swift_pg_data:

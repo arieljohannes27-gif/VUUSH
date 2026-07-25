@@ -1,0 +1,44 @@
+/**
+ * SWIFT Design System v1.0 — colour tokens
+ * Authority: 09_ARCHITECTURE/22_SWIFT_DESIGN_SYSTEM_V1.md
+ * White is the brand. Blue is the accent (~10%).
+ */
+:root {
+  --swift-white: #ffffff;
+  --swift-bg: #fafafa;
+  --swift-surface: #f5f6f8;
+  --swift-border: #e7eaf0;
+
+  --swift-text: #1c1f26;
+  --swift-text-muted: #6b7280;
+  --swift-text-inverse: #ffffff;
+
+  --swift-blue: #2563eb;
+  --swift-blue-soft: #eff4ff;
+  --swift-blue-hover: #1d4ed8;
+  --swift-blue-pressed: #1e40af;
+
+  --swift-success: #16a34a;
+  --swift-success-soft: #dcfce7;
+  --swift-warning: #f59e0b;
+  --swift-warning-soft: #fef3c7;
+  --swift-danger: #dc2626;
+  --swift-danger-soft: #fee2e2;
+
+  /* Aliases used by apps (migration bridge) */
+  --color-bg-canvas: var(--swift-white);
+  --color-bg-page: var(--swift-bg);
+  --color-bg-subtle: var(--swift-surface);
+  --color-bg-elevated: var(--swift-white);
+  --color-border: var(--swift-border);
+  --color-text-primary: var(--swift-text);
+  --color-text-secondary: var(--swift-text-muted);
+  --color-text-inverse: var(--swift-text-inverse);
+  --color-accent: var(--swift-blue);
+  --color-accent-soft: var(--swift-blue-soft);
+  --color-success: var(--swift-success);
+  --color-warning: var(--swift-warning);
+  --color-signal: var(--swift-warning);
+  --color-danger: var(--swift-danger);
+  --color-focus: rgba(37, 99, 235, 0.35);
+}

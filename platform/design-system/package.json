@@ -1,0 +1,17 @@
+{
+  "name": "@swift/design-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SWIFT Design System v1.0 — tokens, Tailwind preset, guidelines",
+  "exports": {
+    "./tokens/tokens.css": "./tokens/tokens.css",
+    "./tokens/*": "./tokens/*",
+    "./tailwind/preset.js": "./tailwind/preset.js"
+  },
+  "files": [
+    "tokens",
+    "tailwind",
+    "guidelines",
+    "README.md"
+  ]
+}
