@@ -38,6 +38,7 @@
     "console:admin": "npm run dev --prefix apps/admin-console"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.44.2",
     "fastify": "^5.4.0",

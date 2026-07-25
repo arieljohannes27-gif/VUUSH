@@ -1,6 +1,7 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { randomUUID } from "node:crypto";
-import { env } from "./config.js";
+import { corsOriginList, env } from "./config.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { auditRoutes } from "./modules/audit/routes.js";
 import { bookingRoutes } from "./modules/booking/routes.js";
@@ -25,6 +26,11 @@ export async function buildApp() {
       if (typeof incoming === "string" && incoming.length > 0) return incoming;
       return randomUUID();
     },
+  });
+
+  await app.register(cors, {
+    origin: corsOriginList(),
+    credentials: true,
   });
 
   app.addHook("onRequest", async (request, reply) => {
