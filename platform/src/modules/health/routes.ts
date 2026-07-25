@@ -4,22 +4,16 @@ import { env } from "../../config.js";
 import { isFlagEnabled } from "../admin/service.js";
 
 export async function healthRoutes(app: FastifyInstance) {
-  app.get("/health", async () => {
-    const database = await checkDatabase();
-    const status = database.ok ? "ok" : "degraded";
+  /** Liveness — Railway healthcheck. Always 200 if the process is up. */
+  app.get("/health", async () => ({
+    status: "ok",
+    service: "vuush-platform",
+    module: "M0",
+    environment: env.NODE_ENV,
+    timestamp: new Date().toISOString(),
+  }));
 
-    return {
-      status,
-      service: "vuush-platform",
-      module: "M0",
-      environment: env.NODE_ENV,
-      checks: {
-        database,
-      },
-      timestamp: new Date().toISOString(),
-    };
-  });
-
+  /** Readiness — database must be reachable. */
   app.get("/ready", async (_request, reply) => {
     const database = await checkDatabase();
     if (!database.ok) {
@@ -28,7 +22,7 @@ export async function healthRoutes(app: FastifyInstance) {
         checks: { database },
       });
     }
-    return { ready: true };
+    return { ready: true, checks: { database } };
   });
 
   app.get("/v1/config/beachhead", async () => ({

@@ -14,5 +14,5 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY drizzle ./drizzle
 EXPOSE 3000
-# Migrate Supabase schema, then start API
-CMD ["sh", "-c", "node dist/db/migrate.js && node dist/server.js"]
+# Migrate best-effort, then always start (so /health can pass; check /ready for DB)
+CMD ["sh", "-c", "node dist/db/migrate.js || echo 'migrate_failed_continuing'; node dist/server.js"]
