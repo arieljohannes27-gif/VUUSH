@@ -565,6 +565,7 @@ export async function listDriverApplications(status?: string) {
       vehiclePlate: driverProfiles.vehiclePlate,
       vehicleLabel: driverProfiles.vehicleLabel,
       vehicleClass: driverProfiles.vehicleClass,
+      vehiclePhotoUrl: driverProfiles.vehiclePhotoUrl,
       applicationNote: driverProfiles.applicationNote,
       reviewReason: driverProfiles.reviewReason,
       reviewedAt: driverProfiles.reviewedAt,

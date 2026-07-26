@@ -77,6 +77,7 @@ export async function upsertDriverProfile(input: {
   applicationNote?: string | null;
   vehiclePlate?: string | null;
   vehicleLabel?: string | null;
+  vehiclePhotoUrl?: string | null;
   publicName?: string | null;
   actorUserId?: string;
   correlationId?: string;
@@ -102,6 +103,7 @@ export async function upsertDriverProfile(input: {
         applicationNote: input.applicationNote ?? existing.applicationNote,
         vehiclePlate: input.vehiclePlate ?? existing.vehiclePlate,
         vehicleLabel: input.vehicleLabel ?? existing.vehicleLabel,
+        vehiclePhotoUrl: input.vehiclePhotoUrl ?? existing.vehiclePhotoUrl,
         publicName: input.publicName ?? existing.publicName,
         active: true,
         updatedAt: new Date(),
@@ -123,6 +125,7 @@ export async function upsertDriverProfile(input: {
         applicationNote: input.applicationNote,
         vehiclePlate: input.vehiclePlate,
         vehicleLabel: input.vehicleLabel,
+        vehiclePhotoUrl: input.vehiclePhotoUrl,
         publicName: input.publicName,
       })
       .returning();

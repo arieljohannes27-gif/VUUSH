@@ -293,6 +293,8 @@ export const driverProfiles = pgTable(
     phonePublic: text("phone_public"),
     vehiclePlate: text("vehicle_plate"),
     vehicleLabel: text("vehicle_label"),
+    /** Live camera capture at signup (beachhead: data URL). */
+    vehiclePhotoUrl: text("vehicle_photo_url"),
     bio: text("bio"),
     licenceStatus: text("licence_status").notNull().default("pending"),
     vehicleDocStatus: text("vehicle_doc_status").notNull().default("pending"),

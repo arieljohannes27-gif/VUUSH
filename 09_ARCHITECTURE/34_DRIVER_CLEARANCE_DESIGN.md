@@ -62,6 +62,7 @@ This is a beachhead **Driver Clearance** desk inside Admin + Driver app apply fl
 | Vehicle / public liability insurance | **Yes** | Policy doc or certificate |
 | Vehicle registration / permit | **If city requires** | Flag per city config |
 | Profile photo | Recommended | Public driver card |
+| **Vehicle photo (live camera)** | **Yes** | Must be taken in-app at signup — no gallery / old uploads |
 | ID / police clearance | **Optional Wave-1** → can be Wave-1.1 | Add when legal ops ready |
 
 Each doc has: file, expiry date (if any), status `missing | uploaded | approved | rejected | expired`.

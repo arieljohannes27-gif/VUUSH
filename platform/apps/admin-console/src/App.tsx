@@ -824,7 +824,24 @@ function Console({
                           <div>Permit: {d.permitRef || "—"}</div>
                         </td>
                         <td>
-                          {d.vehicleClass} · {d.vehiclePlate || "—"}
+                          <div>
+                            {d.vehicleClass} · {d.vehiclePlate || "—"}
+                          </div>
+                          {d.vehiclePhotoUrl ? (
+                            <img
+                              src={d.vehiclePhotoUrl}
+                              alt="Vehicle"
+                              style={{
+                                marginTop: 8,
+                                width: 120,
+                                height: 80,
+                                objectFit: "cover",
+                                borderRadius: 6,
+                              }}
+                            />
+                          ) : (
+                            <div className="muted">No vehicle photo</div>
+                          )}
                         </td>
                         <td className="row-actions">
                           <button

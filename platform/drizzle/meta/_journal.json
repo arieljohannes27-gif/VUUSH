@@ -92,6 +92,13 @@
       "when": 1753916400000,
       "tag": "0012_driver_clearance",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1754002800000,
+      "tag": "0013_vehicle_photo",
+      "breakpoints": true
     }
   ]
 }

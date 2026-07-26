@@ -41,6 +41,7 @@ import {
   verifyOtp,
 } from "./api";
 import { startOfferAlert, stopOfferAlert, unlockOfferAudio, OFFER_ALERT_MS } from "./offerSound";
+import { LiveVehicleCamera } from "./LiveVehicleCamera";
 
 type Tab = "home" | "job" | "earnings" | "emergency" | "settings";
 type AuthView = "landing" | "signup" | "signin" | "verify";
@@ -144,6 +145,7 @@ export default function App() {
   const [insuranceRef, setInsuranceRef] = useState("");
   const [permitRef, setPermitRef] = useState("");
   const [vehiclePlate, setVehiclePlate] = useState("");
+  const [vehiclePhotoUrl, setVehiclePhotoUrl] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
@@ -426,6 +428,9 @@ export default function App() {
 
   async function handleSignup() {
     await run(async () => {
+      if (!vehiclePhotoUrl) {
+        throw new Error("Take a live photo of your vehicle first.");
+      }
       const res = await signupDriver({
         email: email.trim(),
         password,
@@ -436,6 +441,7 @@ export default function App() {
         permitRef: permitRef.trim() || undefined,
         vehiclePlate: vehiclePlate.trim() || undefined,
         vehicleClass: "car",
+        vehiclePhotoUrl,
       });
       setChallengeId(res.challengeId);
       setDevCode(res.devCode ?? null);
@@ -768,7 +774,16 @@ export default function App() {
               <input id="permit" className="field" value={permitRef} onChange={(e) => setPermitRef(e.target.value)} />
               <label className="label" htmlFor="plate">Vehicle plate</label>
               <input id="plate" className="field" value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value)} />
-              <button className="btn btn-primary btn-block" disabled={busy} onClick={handleSignup}>
+              <LiveVehicleCamera
+                value={vehiclePhotoUrl}
+                onCapture={setVehiclePhotoUrl}
+                onClear={() => setVehiclePhotoUrl(null)}
+              />
+              <button
+                className="btn btn-primary btn-block"
+                disabled={busy || !vehiclePhotoUrl}
+                onClick={handleSignup}
+              >
                 Continue — verify email
               </button>
               <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>

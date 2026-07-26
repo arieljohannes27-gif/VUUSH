@@ -33,6 +33,7 @@ export async function signupDriver(input: {
   vehiclePlate?: string;
   vehicleLabel?: string;
   vehicleClass?: string;
+  vehiclePhotoUrl?: string;
   applicationNote?: string;
   correlationId?: string;
 }) {
@@ -42,6 +43,12 @@ export async function signupDriver(input: {
   }
   if (!input.licenceRef.trim() || !input.insuranceRef.trim()) {
     return { ok: false as const, error: "docs_required" };
+  }
+  if (!input.vehiclePhotoUrl?.startsWith("data:image/")) {
+    return { ok: false as const, error: "vehicle_photo_required" };
+  }
+  if (input.vehiclePhotoUrl.length > 900_000) {
+    return { ok: false as const, error: "vehicle_photo_too_large" };
   }
 
   const existing = await db.query.users.findFirst({
@@ -95,6 +102,7 @@ export async function signupDriver(input: {
     applicationNote: input.applicationNote?.trim() || null,
     vehiclePlate: input.vehiclePlate?.trim() || null,
     vehicleLabel: input.vehicleLabel?.trim() || null,
+    vehiclePhotoUrl: input.vehiclePhotoUrl,
     publicName: input.displayName.trim() || null,
     correlationId: input.correlationId,
   });

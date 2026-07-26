@@ -58,6 +58,7 @@ export async function identityRoutes(app: FastifyInstance) {
         vehiclePlate: z.string().max(40).optional(),
         vehicleLabel: z.string().max(120).optional(),
         vehicleClass: z.enum(["bike", "car", "van"]).optional(),
+        vehiclePhotoUrl: z.string().min(32).max(900_000),
         applicationNote: z.string().max(500).optional(),
       })
       .safeParse(request.body);
