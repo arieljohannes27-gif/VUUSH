@@ -309,10 +309,24 @@ h3 {
   justify-content: center;
   gap: 2px;
   min-height: var(--nav-height);
+  margin: 6px 4px;
+  border-radius: 10px;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.nav button:hover {
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .nav button.active {
-  color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.nav button.active:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .nav button.emergency {
@@ -320,8 +334,10 @@ h3 {
   font-weight: 600;
 }
 
+.nav button.emergency:hover,
 .nav button.emergency.active {
   color: var(--color-danger);
+  background: rgba(196, 55, 45, 0.1);
 }
 
 .duty-hero {

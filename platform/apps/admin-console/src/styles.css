@@ -126,20 +126,29 @@ button {
   text-align: left;
   border: none;
   background: transparent;
-  padding: 8px 0;
+  padding: 8px 12px;
+  margin: 0 -4px;
+  border-radius: 8px;
   font-size: 15px;
   font-weight: 500;
   line-height: 1.35;
   color: var(--color-text-primary);
+  transition: background 0.16s ease;
 }
 
 .nav-place:hover {
-  color: var(--swift-blue);
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .nav-place.active {
-  color: var(--swift-blue);
+  color: var(--color-text-primary);
   font-weight: 650;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.nav-place.active:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .main {
@@ -178,20 +187,29 @@ button {
   text-align: left;
   border: none;
   background: transparent;
-  padding: 7px 0;
+  padding: 7px 12px;
+  margin: 0 -4px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 450;
   line-height: 1.35;
   color: var(--color-text-secondary);
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .place-nav-item:hover {
-  color: var(--swift-blue);
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .place-nav-item.active {
-  color: var(--swift-blue);
+  color: var(--color-text-primary);
   font-weight: 600;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.place-nav-item.active:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .main-body {
@@ -367,10 +385,13 @@ button {
   color: var(--color-text-secondary);
   min-height: 32px;
   padding: 0 10px;
+  border-radius: 8px;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .btn-ghost:hover {
   color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .btn-danger {
