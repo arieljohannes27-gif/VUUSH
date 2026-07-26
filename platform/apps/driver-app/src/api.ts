@@ -150,8 +150,8 @@ export async function signupDriver(body: {
   password: string;
   displayName: string;
   phone?: string;
-  licenceRef: string;
-  insuranceRef: string;
+  licenceRef?: string;
+  insuranceRef?: string;
   permitRef?: string;
   vehiclePlate?: string;
   vehicleLabel?: string;
