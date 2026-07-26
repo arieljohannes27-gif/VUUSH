@@ -121,7 +121,7 @@ export async function getUserRoles(userId: string): Promise<string[]> {
   return rows.map((r) => r.role);
 }
 
-async function createSession(input: {
+export async function createSessionForUser(input: {
   userId: string;
   mfaSatisfied: boolean;
   ipAddress?: string;
@@ -263,7 +263,7 @@ export async function verifyOtp(input: {
     };
   }
 
-  const session = await createSession({
+  const session = await createSessionForUser({
     userId: user.id,
     mfaSatisfied: !staff,
     ipAddress: input.ipAddress,
@@ -327,7 +327,7 @@ export async function verifyMfa(input: {
   }
 
   const roles = await getUserRoles(user.id);
-  const session = await createSession({
+  const session = await createSessionForUser({
     userId: user.id,
     mfaSatisfied: true,
     ipAddress: input.ipAddress,
@@ -370,7 +370,7 @@ export async function refreshSession(input: {
     .set({ revokedAt: new Date() })
     .where(eq(sessions.id, existing.id));
 
-  const session = await createSession({
+  const session = await createSessionForUser({
     userId: existing.userId,
     mfaSatisfied: existing.mfaSatisfied,
     ipAddress: existing.ipAddress ?? undefined,

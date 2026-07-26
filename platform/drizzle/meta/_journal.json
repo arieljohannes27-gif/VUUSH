@@ -85,6 +85,13 @@
       "when": 1753830000000,
       "tag": "0011_payout_recipient",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1753916400000,
+      "tag": "0012_driver_clearance",
+      "breakpoints": true
     }
   ]
 }

@@ -216,6 +216,50 @@ export async function fetchStaff(token: string) {
   }>("/v1/admin/staff", { token });
 }
 
+export type DriverApplication = {
+  userId: string;
+  email: string | null;
+  displayName: string | null;
+  phone: string | null;
+  applicationStatus: string;
+  eligibilityStatus: string;
+  licenceRef: string | null;
+  insuranceRef: string | null;
+  permitRef: string | null;
+  licenceStatus: string;
+  insuranceStatus: string;
+  vehiclePlate: string | null;
+  vehicleLabel: string | null;
+  vehicleClass: string;
+  applicationNote: string | null;
+  reviewReason: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+};
+
+export async function fetchDriverApplications(token: string, status?: string) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return api<{ applications: DriverApplication[] }>(
+    `/v1/admin/drivers/applications${qs}`,
+    { token },
+  );
+}
+
+export async function reviewDriverApplication(
+  token: string,
+  userId: string,
+  body: {
+    decision: "approve" | "reject" | "needs_more_info";
+    reasonCode: string;
+    reasonNote?: string;
+  },
+) {
+  return api<{ profile: unknown }>(`/v1/admin/drivers/${userId}/review`, {
+    token,
+    body,
+  });
+}
+
 export async function grantRole(
   token: string,
   userId: string,

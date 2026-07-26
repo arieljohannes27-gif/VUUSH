@@ -19,10 +19,12 @@ import {
   fetchProhibited,
   fetchReasonCodes,
   fetchServiceTypes,
+  fetchDriverApplications,
   fetchStaff,
   fetchZones,
   freezeJobEarnings,
   grantRole,
+  reviewDriverApplication,
   openBreakGlass,
   patchFlag,
   patchPricingParam,
@@ -74,6 +76,7 @@ function BrandLockup() {
 type Nav =
   | "home"
   | "staff"
+  | "drivers"
   | "zones"
   | "services"
   | "reasons"
@@ -260,6 +263,9 @@ function Console({
     Awaited<ReturnType<typeof fetchReasonCodes>>["reasonCodes"]
   >([]);
   const [staff, setStaff] = useState<Awaited<ReturnType<typeof fetchStaff>>["staff"]>([]);
+  const [driverApps, setDriverApps] = useState<
+    Awaited<ReturnType<typeof fetchDriverApplications>>["applications"]
+  >([]);
   const [audit, setAudit] = useState<Awaited<ReturnType<typeof fetchAudit>>["events"]>([]);
   const [auditQ, setAuditQ] = useState("");
   const [glass, setGlass] = useState<
@@ -316,6 +322,9 @@ function Console({
     if (nav === "services") setServices((await fetchServiceTypes(token)).serviceTypes);
     if (nav === "reasons") setReasons((await fetchReasonCodes(token)).reasonCodes);
     if (nav === "staff") setStaff((await fetchStaff(token)).staff);
+    if (nav === "drivers") {
+      setDriverApps((await fetchDriverApplications(token, "pending_review")).applications);
+    }
     if (nav === "audit") setAudit((await fetchAudit(token, auditQ || undefined)).events);
     if (nav === "breakglass") setGlass((await fetchBreakGlass(token)).sessions);
     if (nav === "pricing") {
@@ -410,7 +419,10 @@ function Console({
     {
       id: "people",
       label: "People",
-      items: [{ id: "staff", label: "Staff" }],
+      items: [
+        { id: "drivers", label: "Drivers" },
+        { id: "staff", label: "Staff" },
+      ],
     },
     {
       id: "activity",
@@ -776,6 +788,84 @@ function Console({
                 </tbody>
               </table>
             </div>
+          ) : null}
+
+          {nav === "drivers" ? (
+            <section className="stack">
+              <h1>Driver applications</h1>
+              <p className="muted">Pending clearance — licence, insurance, permits.</p>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Driver</th>
+                    <th>Docs</th>
+                    <th>Vehicle</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {driverApps.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="muted">
+                        No pending applications.
+                      </td>
+                    </tr>
+                  ) : (
+                    driverApps.map((d) => (
+                      <tr key={d.userId}>
+                        <td>
+                          <div>{d.displayName || "—"}</div>
+                          <div className="muted">{d.email}</div>
+                          <div className="muted">{d.phone}</div>
+                        </td>
+                        <td>
+                          <div>Licence: {d.licenceRef || "—"}</div>
+                          <div>Insurance: {d.insuranceRef || "—"}</div>
+                          <div>Permit: {d.permitRef || "—"}</div>
+                        </td>
+                        <td>
+                          {d.vehicleClass} · {d.vehiclePlate || "—"}
+                        </td>
+                        <td className="row-actions">
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={() =>
+                              void run(async () => {
+                                await reviewDriverApplication(token, d.userId, {
+                                  decision: "approve",
+                                  reasonCode: "clearance_ok",
+                                  reasonNote: "Docs cleared",
+                                });
+                                await refresh();
+                              })
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={() =>
+                              void run(async () => {
+                                await reviewDriverApplication(token, d.userId, {
+                                  decision: "reject",
+                                  reasonCode: "clearance_fail",
+                                  reasonNote: "Did not meet requirements",
+                                });
+                                await refresh();
+                              })
+                            }
+                          >
+                            Reject
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </section>
           ) : null}
 
           {nav === "staff" ? (

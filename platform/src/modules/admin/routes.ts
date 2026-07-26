@@ -5,6 +5,7 @@ import {
   closeBreakGlass,
   getAdminHome,
   grantStaffRole,
+  listDriverApplications,
   listFlags,
   listOpenBreakGlass,
   listPricingParams,
@@ -14,6 +15,7 @@ import {
   listStaff,
   listZones,
   openBreakGlass,
+  reviewDriverApplication,
   revokeStaffRole,
   searchAudit,
   updateFlag,
@@ -391,6 +393,49 @@ export async function adminRoutes(app: FastifyInstance) {
           correlationId: request.id,
         });
         return { item };
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.get(
+    "/v1/admin/drivers/applications",
+    { preHandler: requireRoles(...adminOnly) },
+    async (request) => {
+      const q = request.query as { status?: string };
+      return {
+        applications: await listDriverApplications(q.status),
+      };
+    },
+  );
+
+  app.post(
+    "/v1/admin/drivers/:userId/review",
+    { preHandler: requireRoles(...adminOnly) },
+    async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const parsed = z
+        .object({
+          decision: z.enum(["approve", "reject", "needs_more_info"]),
+          reasonCode: z.string().min(2),
+          reasonNote: z.string().max(500).optional(),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const profile = await reviewDriverApplication({
+          userId,
+          decision: parsed.data.decision,
+          reasonCode: parsed.data.reasonCode,
+          reasonNote: parsed.data.reasonNote,
+          actorUserId: request.authUser!.id,
+          correlationId: request.id,
+        });
+        return { profile };
       } catch (err) {
         const mapped = mapError(err);
         return reply.status(mapped.status).send({ error: mapped.error });

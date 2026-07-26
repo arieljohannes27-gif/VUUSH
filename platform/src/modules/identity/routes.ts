@@ -4,6 +4,11 @@ import { requireAuth, requireRoles } from "../../plugins/auth.js";
 import { isDev } from "../../config.js";
 import { isRole } from "./roles.js";
 import {
+  loginDriverPassword,
+  signupDriver,
+  verifyDriverSignup,
+} from "./driver-auth.js";
+import {
   assignRole,
   refreshSession,
   requestOtp,
@@ -40,6 +45,83 @@ const assignRoleSchema = z.object({
 });
 
 export async function identityRoutes(app: FastifyInstance) {
+  app.post("/v1/auth/drivers/signup", async (request, reply) => {
+    const parsed = z
+      .object({
+        email: z.string().email(),
+        password: z.string().min(8).max(200),
+        displayName: z.string().min(2).max(120),
+        phone: z.string().min(7).max(40).optional(),
+        licenceRef: z.string().min(2).max(200),
+        insuranceRef: z.string().min(2).max(200),
+        permitRef: z.string().max(200).optional(),
+        vehiclePlate: z.string().max(40).optional(),
+        vehicleLabel: z.string().max(120).optional(),
+        vehicleClass: z.enum(["bike", "car", "van"]).optional(),
+        applicationNote: z.string().max(500).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "validation_error",
+        details: parsed.error.flatten(),
+      });
+    }
+    const result = await signupDriver({
+      ...parsed.data,
+      correlationId: request.id,
+    });
+    if (!result.ok) {
+      return reply.status(400).send({ error: result.error });
+    }
+    return reply.status(201).send(result);
+  });
+
+  app.post("/v1/auth/drivers/signup/verify", async (request, reply) => {
+    const parsed = otpVerifySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "validation_error",
+        details: parsed.error.flatten(),
+      });
+    }
+    const result = await verifyDriverSignup({
+      ...parsed.data,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"],
+      correlationId: request.id,
+    });
+    if (!result.ok) {
+      return reply.status(401).send({ error: result.error });
+    }
+    return reply.send(result);
+  });
+
+  app.post("/v1/auth/password/login", async (request, reply) => {
+    const parsed = z
+      .object({
+        email: z.string().email(),
+        password: z.string().min(1).max(200),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "validation_error",
+        details: parsed.error.flatten(),
+      });
+    }
+    const result = await loginDriverPassword({
+      ...parsed.data,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"],
+      correlationId: request.id,
+    });
+    if (!result.ok) {
+      return reply.status(401).send({ error: result.error });
+    }
+    return reply.send(result);
+  });
+
   app.post("/v1/auth/otp/request", async (request, reply) => {
     const parsed = otpRequestSchema.safeParse(request.body);
     if (!parsed.success) {

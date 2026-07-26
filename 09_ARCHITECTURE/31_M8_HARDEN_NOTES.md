@@ -69,3 +69,9 @@ Webhook: `POST /v1/payments/webhooks/paystack`
 ---
 
 **Not Harden (later):** Support “where’s my parcel” deep-dive · full invoice product (M7) · live Paystack KYC go-live.
+
+---
+
+## Driver clearance (2026-07-26)
+
+Started from `34_DRIVER_CLEARANCE_DESIGN.md`: password signup + OTP email verify + Admin Approve/Reject. Migration `0012_driver_clearance.sql`.

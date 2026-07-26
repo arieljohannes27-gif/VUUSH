@@ -10,6 +10,7 @@ export type DriverProfile = {
   id: string;
   userId: string;
   eligibilityStatus: string;
+  applicationStatus?: string;
   vehicleClass: string;
   homeZoneCode: string | null;
   onDuty: boolean;
@@ -23,6 +24,11 @@ export type DriverProfile = {
   licenceStatus?: string;
   vehicleDocStatus?: string;
   insuranceStatus?: string;
+  licenceRef?: string | null;
+  insuranceRef?: string | null;
+  permitRef?: string | null;
+  applicationNote?: string | null;
+  reviewReason?: string | null;
 };
 
 export type DriverProfessional = {
@@ -129,6 +135,48 @@ export async function verifyOtp(challengeId: string, code: string) {
     user?: SessionUser;
   }>("/v1/auth/otp/verify", {
     body: { challengeId, code },
+  });
+}
+
+export async function signupDriver(body: {
+  email: string;
+  password: string;
+  displayName: string;
+  phone?: string;
+  licenceRef: string;
+  insuranceRef: string;
+  permitRef?: string;
+  vehiclePlate?: string;
+  vehicleLabel?: string;
+  vehicleClass?: string;
+  applicationNote?: string;
+}) {
+  return api<{
+    challengeId: string;
+    devCode?: string;
+    userId: string;
+  }>("/v1/auth/drivers/signup", { body });
+}
+
+export async function verifyDriverSignup(challengeId: string, code: string) {
+  return api<{
+    status: string;
+    session?: { accessToken: string };
+    user?: SessionUser;
+    profile?: DriverProfile | null;
+  }>("/v1/auth/drivers/signup/verify", {
+    body: { challengeId, code },
+  });
+}
+
+export async function loginPassword(email: string, password: string) {
+  return api<{
+    status: string;
+    session: { accessToken: string };
+    user: SessionUser;
+    profile?: DriverProfile | null;
+  }>("/v1/auth/password/login", {
+    body: { email, password },
   });
 }
 

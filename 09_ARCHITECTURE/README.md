@@ -47,6 +47,7 @@ Official enterprise architecture programme for SWIFT Technologies. Each phase is
 | — | `30_M8_HARDEN_DESIGN.md` | **M8 Harden design — APPROVED (Paystack SA · ZAR)** |
 | — | `32_BEACHHEAD_DEPLOY_CHECKLIST.md` | **Beachhead deploy checklist** (hosting + go-live) |
 | — | `33_BEACHHEAD_GO_LIVE.md` | **Go-live click path** (Supabase · Railway · Vercel) |
+| — | `34_DRIVER_CLEARANCE_DESIGN.md` | **Driver clearance** — password at sign-up + Admin approve |
 | — | `../platform/` | **M0–M8c + M5b maps · VUUSH surface brand** |
 
 ## What comes after baseline

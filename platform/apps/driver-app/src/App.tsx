@@ -22,13 +22,16 @@ import {
   fetchEarnings,
   fetchJobProofs,
   fetchMe,
+  loginPassword,
   pingSignal,
   readGps,
   rejectAssignment,
   requestOtp,
   setDuty,
+  signupDriver,
   startTracking,
   updateDriverProfile,
+  verifyDriverSignup,
   type Assignment,
   type DriverProfessional,
   type DriverProfile,
@@ -40,6 +43,7 @@ import {
 import { startOfferAlert, stopOfferAlert, unlockOfferAudio, OFFER_ALERT_MS } from "./offerSound";
 
 type Tab = "home" | "job" | "earnings" | "emergency" | "settings";
+type AuthView = "landing" | "signup" | "signin" | "verify";
 
 const TOKEN_KEY = "vuush.driver.token";
 const TOKEN_KEY_LEGACY = "swift.driver.token";
@@ -131,10 +135,19 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [email, setEmail] = useState("driver1-m4@vuush.local");
+  const [authView, setAuthView] = useState<AuthView>("landing");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [licenceRef, setLicenceRef] = useState("");
+  const [insuranceRef, setInsuranceRef] = useState("");
+  const [permitRef, setPermitRef] = useState("");
+  const [vehiclePlate, setVehiclePlate] = useState("");
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
+  const [signupMode, setSignupMode] = useState(false);
   const [proofNote, setProofNote] = useState("");
   const [failReason, setFailReason] = useState("customer_unavailable");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -411,12 +424,50 @@ export default function App() {
     }
   }
 
+  async function handleSignup() {
+    await run(async () => {
+      const res = await signupDriver({
+        email: email.trim(),
+        password,
+        displayName: displayName.trim(),
+        phone: phone.trim() || undefined,
+        licenceRef: licenceRef.trim(),
+        insuranceRef: insuranceRef.trim(),
+        permitRef: permitRef.trim() || undefined,
+        vehiclePlate: vehiclePlate.trim() || undefined,
+        vehicleClass: "car",
+      });
+      setChallengeId(res.challengeId);
+      setDevCode(res.devCode ?? null);
+      if (res.devCode) setOtp(res.devCode);
+      setSignupMode(true);
+      setAuthView("verify");
+      setNotice("We sent a code to confirm your email.");
+    });
+  }
+
+  async function handlePasswordLogin() {
+    await run(async () => {
+      await unlockOfferAudio();
+      const res = await loginPassword(email.trim(), password);
+      writeStoredToken(res.session.accessToken);
+      setToken(res.session.accessToken);
+      setUser(res.user);
+      if (res.profile) setProfile(res.profile);
+      await refresh(res.session.accessToken);
+      offerArmedRef.current = true;
+      setNotice("You’re signed in.");
+    });
+  }
+
   async function handleRequestOtp() {
     await run(async () => {
       const res = await requestOtp(email.trim());
       setChallengeId(res.challengeId);
       setDevCode(res.devCode ?? null);
       if (res.devCode) setOtp(res.devCode);
+      setSignupMode(false);
+      setAuthView("verify");
     });
   }
 
@@ -424,6 +475,19 @@ export default function App() {
     if (!challengeId) return;
     await run(async () => {
       await unlockOfferAudio();
+      if (signupMode) {
+        const res = await verifyDriverSignup(challengeId, otp.trim());
+        if (!res.session?.accessToken || !res.user) {
+          throw new Error("login_incomplete");
+        }
+        writeStoredToken(res.session.accessToken);
+        setToken(res.session.accessToken);
+        setUser(res.user);
+        if (res.profile) setProfile(res.profile);
+        await refresh(res.session.accessToken);
+        setNotice("Application received — waiting for approval.");
+        return;
+      }
       const res = await verifyOtp(challengeId, otp.trim());
       if (!res.session?.accessToken || !res.user) {
         throw new Error("login_incomplete");
@@ -431,7 +495,11 @@ export default function App() {
       writeStoredToken(res.session.accessToken);
       setToken(res.session.accessToken);
       setUser(res.user);
-      await ensureDriver(res.user.id);
+      try {
+        await ensureDriver(res.user.id);
+      } catch {
+        /* new applicants use password signup */
+      }
       await refresh(res.session.accessToken);
       offerArmedRef.current = true;
       setNotice("You’re signed in.");
@@ -642,51 +710,149 @@ export default function App() {
           <div className="banner banner-offline">You’re offline. Sign-in needs a connection.</div>
         )}
         {error && <div className="banner banner-error">{error}</div>}
+        {notice && <div className="banner banner-ok">{notice}</div>}
         <div className="app-shell stack">
           <div>
             <h1 className="login-brand">
               <BrandLockup />
             </h1>
             <p className="login-title">Driver</p>
-            <p className="lede">Your time back — from intention to completion.</p>
           </div>
-          <div className="panel stack">
-            <div>
-              <label className="label" htmlFor="email">
-                Work email
-              </label>
-              <input
-                id="email"
-                className="field"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
-            </div>
-            {!challengeId ? (
-              <button className="btn btn-primary btn-block" disabled={busy} onClick={handleRequestOtp}>
-                Send code
+
+          {authView === "landing" && (
+            <div className="panel stack">
+              <p className="lede" style={{ fontSize: "1.25rem", lineHeight: 1.35 }}>
+                Earn on your terms. Deliver with pride.
+              </p>
+              <p className="muted">
+                Join VUUSH — flexible city runs, clear pay, and a team that has your back.
+              </p>
+              <button
+                className="btn btn-primary btn-block"
+                onClick={() => {
+                  setAuthView("signup");
+                  setError(null);
+                }}
+              >
+                Become a driver
               </button>
-            ) : (
-              <>
-                <div>
-                  <label className="label" htmlFor="otp">
-                    One-time code
-                  </label>
-                  <input
-                    id="otp"
-                    className="field"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    inputMode="numeric"
-                  />
-                  {devCode && <p className="muted">Dev code: {devCode}</p>}
-                </div>
-                <button className="btn btn-primary btn-block" disabled={busy} onClick={handleVerifyOtp}>
-                  Sign in
-                </button>
-              </>
-            )}
+              <button
+                className="btn btn-block"
+                onClick={() => {
+                  setAuthView("signin");
+                  setError(null);
+                }}
+              >
+                I already have an account
+              </button>
+            </div>
+          )}
+
+          {authView === "signup" && (
+            <div className="panel stack">
+              <p className="lede">Create your driver account</p>
+              <p className="muted">We’ll review your docs before you can go on duty.</p>
+              <label className="label" htmlFor="name">Full name</label>
+              <input id="name" className="field" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+              <label className="label" htmlFor="email">Email</label>
+              <input id="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+              <label className="label" htmlFor="password">Password (min 8)</label>
+              <input id="password" type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+              <label className="label" htmlFor="phone">Phone</label>
+              <input id="phone" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <label className="label" htmlFor="licence">Driver licence number / ref</label>
+              <input id="licence" className="field" value={licenceRef} onChange={(e) => setLicenceRef(e.target.value)} />
+              <label className="label" htmlFor="insurance">Insurance policy / ref</label>
+              <input id="insurance" className="field" value={insuranceRef} onChange={(e) => setInsuranceRef(e.target.value)} />
+              <label className="label" htmlFor="permit">Permit (if required)</label>
+              <input id="permit" className="field" value={permitRef} onChange={(e) => setPermitRef(e.target.value)} />
+              <label className="label" htmlFor="plate">Vehicle plate</label>
+              <input id="plate" className="field" value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value)} />
+              <button className="btn btn-primary btn-block" disabled={busy} onClick={handleSignup}>
+                Continue — verify email
+              </button>
+              <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>
+                Back
+              </button>
+            </div>
+          )}
+
+          {authView === "signin" && (
+            <div className="panel stack">
+              <p className="lede">Sign in</p>
+              <label className="label" htmlFor="email2">Email</label>
+              <input id="email2" className="field" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+              <label className="label" htmlFor="password2">Password</label>
+              <input id="password2" type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+              <button className="btn btn-primary btn-block" disabled={busy} onClick={handlePasswordLogin}>
+                Sign in
+              </button>
+              <button className="btn btn-block" type="button" disabled={busy} onClick={handleRequestOtp}>
+                Use email code instead
+              </button>
+              <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>
+                Back
+              </button>
+            </div>
+          )}
+
+          {authView === "verify" && (
+            <div className="panel stack">
+              <p className="lede">Enter the code we sent</p>
+              <label className="label" htmlFor="otp">One-time code</label>
+              <input
+                id="otp"
+                className="field"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                inputMode="numeric"
+              />
+              {devCode && <p className="muted">Dev code: {devCode}</p>}
+              <button className="btn btn-primary btn-block" disabled={busy} onClick={handleVerifyOtp}>
+                Confirm
+              </button>
+              <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>
+                Back
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const appStatus = profile?.applicationStatus ?? "approved";
+  const awaitingClearance =
+    appStatus === "pending_review" ||
+    appStatus === "needs_more_info" ||
+    appStatus === "rejected" ||
+    (profile?.eligibilityStatus === "pending" && appStatus !== "approved");
+
+  if (awaitingClearance) {
+    return (
+      <div className="app">
+        {error && <div className="banner banner-error">{error}</div>}
+        <div className="app-shell stack">
+          <h1 className="login-brand">
+            <BrandLockup />
+          </h1>
+          <div className="panel stack">
+            <p className="lede">
+              {appStatus === "rejected"
+                ? "Application not approved"
+                : appStatus === "needs_more_info"
+                  ? "We need a bit more from you"
+                  : "Thanks — we’re reviewing your application"}
+            </p>
+            <p className="muted">
+              {appStatus === "rejected"
+                ? profile?.reviewReason || "Please contact support if you have questions."
+                : "You’ll be able to go on duty after VUUSH clears your licence, insurance, and permits."}
+            </p>
+            <p className="muted">Signed in as {user.email}</p>
+            <button className="btn btn-block" onClick={signOut}>
+              Sign out
+            </button>
           </div>
         </div>
       </div>

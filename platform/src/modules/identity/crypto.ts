@@ -1,4 +1,11 @@
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  scryptSync,
+  timingSafeEqual,
+} from "node:crypto";
 import { env } from "../../config.js";
 
 export function sha256(value: string): string {
@@ -7,6 +14,39 @@ export function sha256(value: string): string {
 
 export function hashSecret(value: string): string {
   return sha256(`${env.AUTH_PEPPER}:${value}`);
+}
+
+/** Password hash: scrypt$N$r$p$salt$hex */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("base64url");
+  const N = 16384;
+  const r = 8;
+  const p = 1;
+  const key = scryptSync(password, `${env.AUTH_PEPPER}:${salt}`, 64, {
+    N,
+    r,
+    p,
+  });
+  return `scrypt$${N}$${r}$${p}$${salt}$${key.toString("hex")}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const parts = stored.split("$");
+  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+  const N = Number(parts[1]);
+  const r = Number(parts[2]);
+  const p = Number(parts[3]);
+  const salt = parts[4];
+  const expectedHex = parts[5];
+  if (!Number.isFinite(N) || !salt || !expectedHex) return false;
+  const key = scryptSync(password, `${env.AUTH_PEPPER}:${salt}`, 64, {
+    N,
+    r,
+    p,
+  });
+  const expected = Buffer.from(expectedHex, "hex");
+  if (expected.length !== key.length) return false;
+  return timingSafeEqual(expected, key);
 }
 
 export function newOpaqueToken(bytes = 32): string {

@@ -3,6 +3,7 @@ import { db } from "../../db/client.js";
 import {
   auditEvents,
   breakGlassSessions,
+  driverProfiles,
   featureFlags,
   pricingParams,
   prohibitedGoods,
@@ -545,6 +546,97 @@ export async function upsertProhibitedGood(input: {
     payload: { before, after: row },
   });
   return row;
+}
+
+export async function listDriverApplications(status?: string) {
+  const base = db
+    .select({
+      userId: driverProfiles.userId,
+      email: users.email,
+      displayName: users.displayName,
+      phone: users.phone,
+      applicationStatus: driverProfiles.applicationStatus,
+      eligibilityStatus: driverProfiles.eligibilityStatus,
+      licenceRef: driverProfiles.licenceRef,
+      insuranceRef: driverProfiles.insuranceRef,
+      permitRef: driverProfiles.permitRef,
+      licenceStatus: driverProfiles.licenceStatus,
+      insuranceStatus: driverProfiles.insuranceStatus,
+      vehiclePlate: driverProfiles.vehiclePlate,
+      vehicleLabel: driverProfiles.vehicleLabel,
+      vehicleClass: driverProfiles.vehicleClass,
+      applicationNote: driverProfiles.applicationNote,
+      reviewReason: driverProfiles.reviewReason,
+      reviewedAt: driverProfiles.reviewedAt,
+      createdAt: driverProfiles.createdAt,
+    })
+    .from(driverProfiles)
+    .innerJoin(users, eq(users.id, driverProfiles.userId));
+
+  const rows = status
+    ? await base
+        .where(eq(driverProfiles.applicationStatus, status))
+        .orderBy(desc(driverProfiles.createdAt))
+    : await base.orderBy(desc(driverProfiles.createdAt));
+  return rows;
+}
+
+export async function reviewDriverApplication(input: {
+  userId: string;
+  decision: "approve" | "reject" | "needs_more_info";
+  reasonCode: string;
+  reasonNote?: string;
+  actorUserId: string;
+  correlationId?: string;
+}) {
+  const profile = await db.query.driverProfiles.findFirst({
+    where: eq(driverProfiles.userId, input.userId),
+  });
+  if (!profile) throw new Error("driver_profile_missing");
+
+  const applicationStatus =
+    input.decision === "approve"
+      ? "approved"
+      : input.decision === "reject"
+        ? "rejected"
+        : "needs_more_info";
+  const eligibilityStatus =
+    input.decision === "approve" ? "eligible" : "pending";
+
+  const [updated] = await db
+    .update(driverProfiles)
+    .set({
+      applicationStatus,
+      eligibilityStatus,
+      onDuty: input.decision === "approve" ? profile.onDuty : false,
+      licenceStatus:
+        input.decision === "approve" ? "approved" : profile.licenceStatus,
+      insuranceStatus:
+        input.decision === "approve" ? "approved" : profile.insuranceStatus,
+      reviewedAt: new Date(),
+      reviewedByUserId: input.actorUserId,
+      reviewReason: input.reasonNote?.trim() || input.reasonCode,
+      updatedAt: new Date(),
+    })
+    .where(eq(driverProfiles.id, profile.id))
+    .returning();
+
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: input.actorUserId,
+    action: "DRIVER_APPLICATION_REVIEWED",
+    subjectType: "driver_profile",
+    subjectId: profile.id,
+    reasonCode: input.reasonCode,
+    correlationId: input.correlationId,
+    payload: {
+      decision: input.decision,
+      applicationStatus,
+      userId: input.userId,
+    },
+  });
+
+  return updated;
 }
 
 export async function listStaff() {

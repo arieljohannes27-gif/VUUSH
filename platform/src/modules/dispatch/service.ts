@@ -53,7 +53,10 @@ async function requireDriverProfile(userId: string) {
 }
 
 function assertEligible(profile: typeof driverProfiles.$inferSelect, packageClass: string) {
-  if (profile.eligibilityStatus !== "eligible") {
+  if (
+    profile.eligibilityStatus !== "eligible" ||
+    profile.applicationStatus !== "approved"
+  ) {
     throw new Error("driver_not_eligible");
   }
   if (!profile.onDuty) throw new Error("driver_off_duty");
@@ -67,6 +70,14 @@ export async function upsertDriverProfile(input: {
   vehicleClass?: string;
   homeZoneCode?: string;
   eligibilityStatus?: string;
+  applicationStatus?: string;
+  licenceRef?: string | null;
+  insuranceRef?: string | null;
+  permitRef?: string | null;
+  applicationNote?: string | null;
+  vehiclePlate?: string | null;
+  vehicleLabel?: string | null;
+  publicName?: string | null;
   actorUserId?: string;
   correlationId?: string;
 }) {
@@ -83,6 +94,15 @@ export async function upsertDriverProfile(input: {
         homeZoneCode: input.homeZoneCode ?? existing.homeZoneCode,
         eligibilityStatus:
           input.eligibilityStatus ?? existing.eligibilityStatus,
+        applicationStatus:
+          input.applicationStatus ?? existing.applicationStatus,
+        licenceRef: input.licenceRef ?? existing.licenceRef,
+        insuranceRef: input.insuranceRef ?? existing.insuranceRef,
+        permitRef: input.permitRef ?? existing.permitRef,
+        applicationNote: input.applicationNote ?? existing.applicationNote,
+        vehiclePlate: input.vehiclePlate ?? existing.vehiclePlate,
+        vehicleLabel: input.vehicleLabel ?? existing.vehicleLabel,
+        publicName: input.publicName ?? existing.publicName,
         active: true,
         updatedAt: new Date(),
       })
@@ -95,7 +115,15 @@ export async function upsertDriverProfile(input: {
         userId: input.userId,
         vehicleClass: input.vehicleClass ?? "car",
         homeZoneCode: input.homeZoneCode,
-        eligibilityStatus: input.eligibilityStatus ?? "eligible",
+        eligibilityStatus: input.eligibilityStatus ?? "pending",
+        applicationStatus: input.applicationStatus ?? "pending_review",
+        licenceRef: input.licenceRef,
+        insuranceRef: input.insuranceRef,
+        permitRef: input.permitRef,
+        applicationNote: input.applicationNote,
+        vehiclePlate: input.vehiclePlate,
+        vehicleLabel: input.vehicleLabel,
+        publicName: input.publicName,
       })
       .returning();
   }
@@ -141,7 +169,11 @@ export async function setDutyStatus(input: {
   correlationId?: string;
 }) {
   const profile = await requireDriverProfile(input.userId);
-  if (profile.eligibilityStatus !== "eligible" && input.onDuty) {
+  if (
+    input.onDuty &&
+    (profile.eligibilityStatus !== "eligible" ||
+      profile.applicationStatus !== "approved")
+  ) {
     throw new Error("driver_not_eligible");
   }
 

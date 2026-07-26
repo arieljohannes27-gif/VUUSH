@@ -435,6 +435,8 @@ export async function dispatchRoutes(app: FastifyInstance) {
         userId: parsed.data.userId,
         vehicleClass: parsed.data.vehicleClass,
         homeZoneCode: parsed.data.homeZoneCode,
+        eligibilityStatus: "eligible",
+        applicationStatus: "approved",
         correlationId: request.id,
       });
       return reply.status(201).send({ profile });

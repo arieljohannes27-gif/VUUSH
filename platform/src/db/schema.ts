@@ -57,6 +57,8 @@ export const users = pgTable(
     email: text("email"),
     displayName: text("display_name"),
     status: text("status").notNull().default("active"),
+    /** scrypt hash for driver password login (null = OTP-only / legacy). */
+    passwordHash: text("password_hash"),
     totpSecret: text("totp_secret"),
     totpEnabled: boolean("totp_enabled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -275,7 +277,12 @@ export const driverProfiles = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
-    eligibilityStatus: text("eligibility_status").notNull().default("eligible"),
+    eligibilityStatus: text("eligibility_status").notNull().default("pending"),
+    /**
+     * draft | pending_review | needs_more_info | approved | rejected | suspended
+     * Duty/offers require approved (+ eligibility eligible).
+     */
+    applicationStatus: text("application_status").notNull().default("pending_review"),
     vehicleClass: text("vehicle_class").notNull().default("car"),
     homeZoneCode: text("home_zone_code"),
     onDuty: boolean("on_duty").notNull().default(false),
@@ -290,6 +297,13 @@ export const driverProfiles = pgTable(
     licenceStatus: text("licence_status").notNull().default("pending"),
     vehicleDocStatus: text("vehicle_doc_status").notNull().default("pending"),
     insuranceStatus: text("insurance_status").notNull().default("pending"),
+    licenceRef: text("licence_ref"),
+    insuranceRef: text("insurance_ref"),
+    permitRef: text("permit_ref"),
+    applicationNote: text("application_note"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedByUserId: uuid("reviewed_by_user_id"),
+    reviewReason: text("review_reason"),
     /** Paystack transfer recipient code (RCP_…) — never raw bank PANs. */
     payoutRecipientCode: text("payout_recipient_code"),
     createdAt: timestamp("created_at", { withTimezone: true })
