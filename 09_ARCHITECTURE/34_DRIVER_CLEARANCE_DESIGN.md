@@ -64,6 +64,7 @@ This is a beachhead **Driver Clearance** desk inside Admin + Driver app apply fl
 | **Vehicle photo** | **Yes** | **Live camera only** — no gallery |
 | **Vehicle insurance** | **Yes** | PDF or clear photo |
 | **Goods insurance ≥ R100 000** | **Yes** | PDF or clear photo of policy / schedule |
+| **Police clearance** | **Yes** | PDF or clear photo |
 | Permit | If city requires | Later / optional note |
 
 Each doc has: file, expiry date (if any), status `missing | uploaded | approved | rejected | expired`.

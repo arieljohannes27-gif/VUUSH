@@ -305,6 +305,8 @@ export const driverProfiles = pgTable(
     vehicleInsuranceDocUrl: text("vehicle_insurance_doc_url"),
     /** Goods-in-transit / cargo cover proof (beachhead: ≥ R100 000). */
     goodsInsuranceDocUrl: text("goods_insurance_doc_url"),
+    /** Police clearance — PDF or clear photo. */
+    policeClearanceDocUrl: text("police_clearance_doc_url"),
     bio: text("bio"),
     licenceStatus: text("licence_status").notNull().default("pending"),
     vehicleDocStatus: text("vehicle_doc_status").notNull().default("pending"),

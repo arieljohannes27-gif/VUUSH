@@ -835,6 +835,7 @@ function Console({
                           <DocLink label="Licence" url={d.licenceDocUrl} />
                           <DocLink label="Vehicle insurance" url={d.vehicleInsuranceDocUrl} />
                           <DocLink label="Goods ≥ R100k" url={d.goodsInsuranceDocUrl} />
+                          <DocLink label="Police clearance" url={d.policeClearanceDocUrl} />
                         </td>
                         <td>
                           <div>

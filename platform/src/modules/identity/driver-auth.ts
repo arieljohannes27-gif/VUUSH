@@ -43,6 +43,7 @@ export async function signupDriver(input: {
   selfiePhotoUrl?: string;
   vehicleInsuranceDocUrl?: string;
   goodsInsuranceDocUrl?: string;
+  policeClearanceDocUrl?: string;
   applicationNote?: string;
   correlationId?: string;
 }) {
@@ -75,6 +76,11 @@ export async function signupDriver(input: {
     "goods_insurance_required",
   );
   if (typeof goodsIns !== "string") return goodsIns;
+  const police = assertPdfOrImageDataUrl(
+    input.policeClearanceDocUrl,
+    "police_clearance_required",
+  );
+  if (typeof police !== "string") return police;
 
   const existing = await db.query.users.findFirst({
     where: inArray(users.email, emailLookupCandidates(email)),
@@ -135,6 +141,7 @@ export async function signupDriver(input: {
     selfiePhotoUrl: selfie,
     vehicleInsuranceDocUrl: vehicleIns,
     goodsInsuranceDocUrl: goodsIns,
+    policeClearanceDocUrl: police,
     publicName: input.displayName.trim() || null,
     correlationId: input.correlationId,
   });

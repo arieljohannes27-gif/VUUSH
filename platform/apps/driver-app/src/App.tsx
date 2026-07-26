@@ -150,6 +150,7 @@ export default function App() {
   const [selfiePhotoUrl, setSelfiePhotoUrl] = useState<string | null>(null);
   const [vehicleInsuranceDocUrl, setVehicleInsuranceDocUrl] = useState<string | null>(null);
   const [goodsInsuranceDocUrl, setGoodsInsuranceDocUrl] = useState<string | null>(null);
+  const [policeClearanceDocUrl, setPoliceClearanceDocUrl] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
@@ -442,6 +443,9 @@ export default function App() {
       if (!goodsInsuranceDocUrl) {
         throw new Error("Upload goods insurance cover (min R100 000).");
       }
+      if (!policeClearanceDocUrl) {
+        throw new Error("Upload police clearance (PDF or clear photo).");
+      }
       const res = await signupDriver({
         email: email.trim(),
         password,
@@ -455,6 +459,7 @@ export default function App() {
         selfiePhotoUrl,
         vehicleInsuranceDocUrl,
         goodsInsuranceDocUrl,
+        policeClearanceDocUrl,
         applicationNote: "Goods cover declared ≥ R100 000",
       });
       setChallengeId(res.challengeId);
@@ -820,6 +825,12 @@ export default function App() {
                 value={goodsInsuranceDocUrl}
                 onChange={setGoodsInsuranceDocUrl}
               />
+              <DocFileField
+                label="Police clearance"
+                help="PDF or clear photo of your police clearance certificate."
+                value={policeClearanceDocUrl}
+                onChange={setPoliceClearanceDocUrl}
+              />
 
               <button
                 className="btn btn-primary btn-block"
@@ -830,7 +841,8 @@ export default function App() {
                   !selfiePhotoUrl ||
                   !vehiclePhotoUrl ||
                   !vehicleInsuranceDocUrl ||
-                  !goodsInsuranceDocUrl
+                  !goodsInsuranceDocUrl ||
+                  !policeClearanceDocUrl
                 }
                 onClick={handleSignup}
               >

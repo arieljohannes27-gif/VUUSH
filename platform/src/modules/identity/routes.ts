@@ -64,6 +64,7 @@ export async function identityRoutes(app: FastifyInstance) {
         selfiePhotoUrl: z.string().min(32).max(900_000),
         vehicleInsuranceDocUrl: z.string().min(32).max(1_200_000),
         goodsInsuranceDocUrl: z.string().min(32).max(1_200_000),
+        policeClearanceDocUrl: z.string().min(32).max(1_200_000),
         applicationNote: z.string().max(500).optional(),
       })
       .safeParse(request.body);

@@ -571,6 +571,7 @@ export async function listDriverApplications(status?: string) {
       selfiePhotoUrl: driverProfiles.selfiePhotoUrl,
       vehicleInsuranceDocUrl: driverProfiles.vehicleInsuranceDocUrl,
       goodsInsuranceDocUrl: driverProfiles.goodsInsuranceDocUrl,
+      policeClearanceDocUrl: driverProfiles.policeClearanceDocUrl,
       applicationNote: driverProfiles.applicationNote,
       reviewReason: driverProfiles.reviewReason,
       reviewedAt: driverProfiles.reviewedAt,
