@@ -5,6 +5,10 @@ import { writeAuditEvent } from "../audit/service.js";
 import { upsertDriverProfile } from "../dispatch/service.js";
 import { hashPassword, verifyPassword } from "./crypto.js";
 import {
+  assertPdfOrImageDataUrl,
+  assertPhotoDataUrl,
+} from "./doc-validate.js";
+import {
   createSessionForUser,
   getUserRoles,
   requestOtp,
@@ -27,13 +31,18 @@ export async function signupDriver(input: {
   password: string;
   displayName: string;
   phone?: string;
-  licenceRef: string;
-  insuranceRef: string;
+  licenceRef?: string;
+  insuranceRef?: string;
   permitRef?: string;
   vehiclePlate?: string;
   vehicleLabel?: string;
   vehicleClass?: string;
   vehiclePhotoUrl?: string;
+  idDocUrl?: string;
+  licenceDocUrl?: string;
+  selfiePhotoUrl?: string;
+  vehicleInsuranceDocUrl?: string;
+  goodsInsuranceDocUrl?: string;
   applicationNote?: string;
   correlationId?: string;
 }) {
@@ -41,15 +50,31 @@ export async function signupDriver(input: {
   if (input.password.length < 8) {
     return { ok: false as const, error: "password_too_short" };
   }
-  if (!input.licenceRef.trim() || !input.insuranceRef.trim()) {
-    return { ok: false as const, error: "docs_required" };
-  }
-  if (!input.vehiclePhotoUrl?.startsWith("data:image/")) {
-    return { ok: false as const, error: "vehicle_photo_required" };
-  }
-  if (input.vehiclePhotoUrl.length > 900_000) {
-    return { ok: false as const, error: "vehicle_photo_too_large" };
-  }
+
+  const idDoc = assertPdfOrImageDataUrl(input.idDocUrl, "id_doc_required");
+  if (typeof idDoc !== "string") return idDoc;
+  const licenceDoc = assertPdfOrImageDataUrl(
+    input.licenceDocUrl,
+    "licence_doc_required",
+  );
+  if (typeof licenceDoc !== "string") return licenceDoc;
+  const selfie = assertPhotoDataUrl(input.selfiePhotoUrl, "selfie_required");
+  if (typeof selfie !== "string") return selfie;
+  const vehiclePhoto = assertPhotoDataUrl(
+    input.vehiclePhotoUrl,
+    "vehicle_photo_required",
+  );
+  if (typeof vehiclePhoto !== "string") return vehiclePhoto;
+  const vehicleIns = assertPdfOrImageDataUrl(
+    input.vehicleInsuranceDocUrl,
+    "vehicle_insurance_required",
+  );
+  if (typeof vehicleIns !== "string") return vehicleIns;
+  const goodsIns = assertPdfOrImageDataUrl(
+    input.goodsInsuranceDocUrl,
+    "goods_insurance_required",
+  );
+  if (typeof goodsIns !== "string") return goodsIns;
 
   const existing = await db.query.users.findFirst({
     where: inArray(users.email, emailLookupCandidates(email)),
@@ -96,13 +121,20 @@ export async function signupDriver(input: {
     vehicleClass: input.vehicleClass ?? "car",
     eligibilityStatus: "pending",
     applicationStatus: "pending_review",
-    licenceRef: input.licenceRef.trim(),
-    insuranceRef: input.insuranceRef.trim(),
+    licenceRef: input.licenceRef?.trim() || "see_licence_doc",
+    insuranceRef: input.insuranceRef?.trim() || "goods_cover_r100000",
     permitRef: input.permitRef?.trim() || null,
-    applicationNote: input.applicationNote?.trim() || null,
+    applicationNote:
+      input.applicationNote?.trim() ||
+      "Goods-in-transit cover declared ≥ R100 000",
     vehiclePlate: input.vehiclePlate?.trim() || null,
     vehicleLabel: input.vehicleLabel?.trim() || null,
-    vehiclePhotoUrl: input.vehiclePhotoUrl,
+    vehiclePhotoUrl: vehiclePhoto,
+    idDocUrl: idDoc,
+    licenceDocUrl: licenceDoc,
+    selfiePhotoUrl: selfie,
+    vehicleInsuranceDocUrl: vehicleIns,
+    goodsInsuranceDocUrl: goodsIns,
     publicName: input.displayName.trim() || null,
     correlationId: input.correlationId,
   });
@@ -112,7 +144,7 @@ export async function signupDriver(input: {
     .set({
       licenceStatus: "uploaded",
       insuranceStatus: "uploaded",
-      vehicleDocStatus: input.permitRef?.trim() ? "uploaded" : "pending",
+      vehicleDocStatus: "uploaded",
       updatedAt: new Date(),
     })
     .where(eq(driverProfiles.userId, user.id));

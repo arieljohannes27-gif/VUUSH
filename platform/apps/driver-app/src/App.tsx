@@ -41,6 +41,8 @@ import {
   verifyOtp,
 } from "./api";
 import { startOfferAlert, stopOfferAlert, unlockOfferAudio, OFFER_ALERT_MS } from "./offerSound";
+import { DocFileField } from "./DocFileField";
+import { LiveCamera } from "./LiveCamera";
 import { LiveVehicleCamera } from "./LiveVehicleCamera";
 
 type Tab = "home" | "job" | "earnings" | "emergency" | "settings";
@@ -141,11 +143,13 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
-  const [licenceRef, setLicenceRef] = useState("");
-  const [insuranceRef, setInsuranceRef] = useState("");
-  const [permitRef, setPermitRef] = useState("");
   const [vehiclePlate, setVehiclePlate] = useState("");
   const [vehiclePhotoUrl, setVehiclePhotoUrl] = useState<string | null>(null);
+  const [idDocUrl, setIdDocUrl] = useState<string | null>(null);
+  const [licenceDocUrl, setLicenceDocUrl] = useState<string | null>(null);
+  const [selfiePhotoUrl, setSelfiePhotoUrl] = useState<string | null>(null);
+  const [vehicleInsuranceDocUrl, setVehicleInsuranceDocUrl] = useState<string | null>(null);
+  const [goodsInsuranceDocUrl, setGoodsInsuranceDocUrl] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
@@ -428,20 +432,30 @@ export default function App() {
 
   async function handleSignup() {
     await run(async () => {
-      if (!vehiclePhotoUrl) {
-        throw new Error("Take a live photo of your vehicle first.");
+      if (!idDocUrl) throw new Error("Upload your ID (PDF or clear photo).");
+      if (!licenceDocUrl) throw new Error("Upload your driver licence (PDF or clear photo).");
+      if (!selfiePhotoUrl) throw new Error("Take a live selfie first.");
+      if (!vehiclePhotoUrl) throw new Error("Take a live photo of your vehicle first.");
+      if (!vehicleInsuranceDocUrl) {
+        throw new Error("Upload vehicle insurance document.");
+      }
+      if (!goodsInsuranceDocUrl) {
+        throw new Error("Upload goods insurance cover (min R100 000).");
       }
       const res = await signupDriver({
         email: email.trim(),
         password,
         displayName: displayName.trim(),
         phone: phone.trim() || undefined,
-        licenceRef: licenceRef.trim(),
-        insuranceRef: insuranceRef.trim(),
-        permitRef: permitRef.trim() || undefined,
         vehiclePlate: vehiclePlate.trim() || undefined,
         vehicleClass: "car",
         vehiclePhotoUrl,
+        idDocUrl,
+        licenceDocUrl,
+        selfiePhotoUrl,
+        vehicleInsuranceDocUrl,
+        goodsInsuranceDocUrl,
+        applicationNote: "Goods cover declared ≥ R100 000",
       });
       setChallengeId(res.challengeId);
       setDevCode(res.devCode ?? null);
@@ -766,22 +780,58 @@ export default function App() {
               <input id="password" type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
               <label className="label" htmlFor="phone">Phone</label>
               <input id="phone" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              <label className="label" htmlFor="licence">Driver licence number / ref</label>
-              <input id="licence" className="field" value={licenceRef} onChange={(e) => setLicenceRef(e.target.value)} />
-              <label className="label" htmlFor="insurance">Insurance policy / ref</label>
-              <input id="insurance" className="field" value={insuranceRef} onChange={(e) => setInsuranceRef(e.target.value)} />
-              <label className="label" htmlFor="permit">Permit (if required)</label>
-              <input id="permit" className="field" value={permitRef} onChange={(e) => setPermitRef(e.target.value)} />
               <label className="label" htmlFor="plate">Vehicle plate</label>
               <input id="plate" className="field" value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value)} />
+
+              <DocFileField
+                label="ID document"
+                help="PDF or a clear photo of your ID."
+                value={idDocUrl}
+                onChange={setIdDocUrl}
+              />
+              <DocFileField
+                label="Driver licence"
+                help="PDF or a clear photo of your licence."
+                value={licenceDocUrl}
+                onChange={setLicenceDocUrl}
+              />
+              <LiveCamera
+                label="Photo of yourself — live only"
+                help="Take a selfie now with the camera. No PDF and no old gallery photos."
+                facing="user"
+                value={selfiePhotoUrl}
+                onCapture={setSelfiePhotoUrl}
+                onClear={() => setSelfiePhotoUrl(null)}
+              />
               <LiveVehicleCamera
                 value={vehiclePhotoUrl}
                 onCapture={setVehiclePhotoUrl}
                 onClear={() => setVehiclePhotoUrl(null)}
               />
+              <DocFileField
+                label="Vehicle insurance"
+                help="PDF or clear photo of your vehicle insurance document."
+                value={vehicleInsuranceDocUrl}
+                onChange={setVehicleInsuranceDocUrl}
+              />
+              <DocFileField
+                label="Goods insurance (min R100 000)"
+                help="PDF or clear photo proving goods / cargo cover of at least R100 000."
+                value={goodsInsuranceDocUrl}
+                onChange={setGoodsInsuranceDocUrl}
+              />
+
               <button
                 className="btn btn-primary btn-block"
-                disabled={busy || !vehiclePhotoUrl}
+                disabled={
+                  busy ||
+                  !idDocUrl ||
+                  !licenceDocUrl ||
+                  !selfiePhotoUrl ||
+                  !vehiclePhotoUrl ||
+                  !vehicleInsuranceDocUrl ||
+                  !goodsInsuranceDocUrl
+                }
                 onClick={handleSignup}
               >
                 Continue — verify email

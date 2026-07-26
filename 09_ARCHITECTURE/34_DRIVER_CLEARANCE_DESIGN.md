@@ -56,14 +56,15 @@ This is a beachhead **Driver Clearance** desk inside Admin + Driver app apply fl
 
 ## 5. Documents (beachhead minimum)
 
-| Doc | Required for beachhead? | Notes |
-|-----|-------------------------|--------|
-| Driver licence (photo / PDF) | **Yes** | Front (+ back if SA dual-side) |
-| Vehicle / public liability insurance | **Yes** | Policy doc or certificate |
-| Vehicle registration / permit | **If city requires** | Flag per city config |
-| Profile photo | Recommended | Public driver card |
-| **Vehicle photo (live camera)** | **Yes** | Must be taken in-app at signup — no gallery / old uploads |
-| ID / police clearance | **Optional Wave-1** → can be Wave-1.1 | Add when legal ops ready |
+| Doc | Required? | How |
+|-----|-----------|-----|
+| **ID document** | **Yes** | PDF or clear photo (upload OK) |
+| **Driver licence** | **Yes** | PDF or clear photo (upload OK) |
+| **Selfie / photo of self** | **Yes** | **Live camera only** — no PDF, no gallery |
+| **Vehicle photo** | **Yes** | **Live camera only** — no gallery |
+| **Vehicle insurance** | **Yes** | PDF or clear photo |
+| **Goods insurance ≥ R100 000** | **Yes** | PDF or clear photo of policy / schedule |
+| Permit | If city requires | Later / optional note |
 
 Each doc has: file, expiry date (if any), status `missing | uploaded | approved | rejected | expired`.
 

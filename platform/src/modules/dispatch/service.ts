@@ -78,6 +78,11 @@ export async function upsertDriverProfile(input: {
   vehiclePlate?: string | null;
   vehicleLabel?: string | null;
   vehiclePhotoUrl?: string | null;
+  idDocUrl?: string | null;
+  licenceDocUrl?: string | null;
+  selfiePhotoUrl?: string | null;
+  vehicleInsuranceDocUrl?: string | null;
+  goodsInsuranceDocUrl?: string | null;
   publicName?: string | null;
   actorUserId?: string;
   correlationId?: string;
@@ -104,6 +109,13 @@ export async function upsertDriverProfile(input: {
         vehiclePlate: input.vehiclePlate ?? existing.vehiclePlate,
         vehicleLabel: input.vehicleLabel ?? existing.vehicleLabel,
         vehiclePhotoUrl: input.vehiclePhotoUrl ?? existing.vehiclePhotoUrl,
+        idDocUrl: input.idDocUrl ?? existing.idDocUrl,
+        licenceDocUrl: input.licenceDocUrl ?? existing.licenceDocUrl,
+        selfiePhotoUrl: input.selfiePhotoUrl ?? existing.selfiePhotoUrl,
+        vehicleInsuranceDocUrl:
+          input.vehicleInsuranceDocUrl ?? existing.vehicleInsuranceDocUrl,
+        goodsInsuranceDocUrl:
+          input.goodsInsuranceDocUrl ?? existing.goodsInsuranceDocUrl,
         publicName: input.publicName ?? existing.publicName,
         active: true,
         updatedAt: new Date(),
@@ -126,6 +138,11 @@ export async function upsertDriverProfile(input: {
         vehiclePlate: input.vehiclePlate,
         vehicleLabel: input.vehicleLabel,
         vehiclePhotoUrl: input.vehiclePhotoUrl,
+        idDocUrl: input.idDocUrl,
+        licenceDocUrl: input.licenceDocUrl,
+        selfiePhotoUrl: input.selfiePhotoUrl,
+        vehicleInsuranceDocUrl: input.vehicleInsuranceDocUrl,
+        goodsInsuranceDocUrl: input.goodsInsuranceDocUrl,
         publicName: input.publicName,
       })
       .returning();

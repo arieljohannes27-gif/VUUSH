@@ -21,6 +21,11 @@ export type DriverProfile = {
   vehiclePlate?: string | null;
   vehicleLabel?: string | null;
   vehiclePhotoUrl?: string | null;
+  idDocUrl?: string | null;
+  licenceDocUrl?: string | null;
+  selfiePhotoUrl?: string | null;
+  vehicleInsuranceDocUrl?: string | null;
+  goodsInsuranceDocUrl?: string | null;
   bio?: string | null;
   licenceStatus?: string;
   vehicleDocStatus?: string;
@@ -151,6 +156,11 @@ export async function signupDriver(body: {
   vehicleLabel?: string;
   vehicleClass?: string;
   vehiclePhotoUrl: string;
+  idDocUrl: string;
+  licenceDocUrl: string;
+  selfiePhotoUrl: string;
+  vehicleInsuranceDocUrl: string;
+  goodsInsuranceDocUrl: string;
   applicationNote?: string;
 }) {
   return api<{

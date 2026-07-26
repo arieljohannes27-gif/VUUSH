@@ -295,6 +295,16 @@ export const driverProfiles = pgTable(
     vehicleLabel: text("vehicle_label"),
     /** Live camera capture at signup (beachhead: data URL). */
     vehiclePhotoUrl: text("vehicle_photo_url"),
+    /** ID document — PDF or clear photo (data URL beachhead). */
+    idDocUrl: text("id_doc_url"),
+    /** Driver licence — PDF or clear photo. */
+    licenceDocUrl: text("licence_doc_url"),
+    /** Live selfie only (camera). */
+    selfiePhotoUrl: text("selfie_photo_url"),
+    /** Vehicle insurance document. */
+    vehicleInsuranceDocUrl: text("vehicle_insurance_doc_url"),
+    /** Goods-in-transit / cargo cover proof (beachhead: ≥ R100 000). */
+    goodsInsuranceDocUrl: text("goods_insurance_doc_url"),
     bio: text("bio"),
     licenceStatus: text("licence_status").notNull().default("pending"),
     vehicleDocStatus: text("vehicle_doc_status").notNull().default("pending"),

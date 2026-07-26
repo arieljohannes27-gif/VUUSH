@@ -232,6 +232,11 @@ export type DriverApplication = {
   vehicleLabel: string | null;
   vehicleClass: string;
   vehiclePhotoUrl: string | null;
+  idDocUrl: string | null;
+  licenceDocUrl: string | null;
+  selfiePhotoUrl: string | null;
+  vehicleInsuranceDocUrl: string | null;
+  goodsInsuranceDocUrl: string | null;
   applicationNote: string | null;
   reviewReason: string | null;
   reviewedAt: string | null;

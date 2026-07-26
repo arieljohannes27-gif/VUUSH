@@ -50,6 +50,18 @@ import {
 } from "./totp";
 
 const TOKEN_KEY = "vuush.admin.token";
+
+function DocLink({ label, url }: { label: string; url: string | null }) {
+  if (!url) return <div className="muted">{label}: —</div>;
+  const kind = url.startsWith("data:application/pdf") ? "PDF" : "photo";
+  return (
+    <div>
+      <a href={url} target="_blank" rel="noreferrer">
+        {label} ({kind})
+      </a>
+    </div>
+  );
+}
 const TOKEN_KEY_LEGACY = "swift.admin.token";
 
 function readStoredToken() {
@@ -819,29 +831,33 @@ function Console({
                           <div className="muted">{d.phone}</div>
                         </td>
                         <td>
-                          <div>Licence: {d.licenceRef || "—"}</div>
-                          <div>Insurance: {d.insuranceRef || "—"}</div>
-                          <div>Permit: {d.permitRef || "—"}</div>
+                          <DocLink label="ID" url={d.idDocUrl} />
+                          <DocLink label="Licence" url={d.licenceDocUrl} />
+                          <DocLink label="Vehicle insurance" url={d.vehicleInsuranceDocUrl} />
+                          <DocLink label="Goods ≥ R100k" url={d.goodsInsuranceDocUrl} />
                         </td>
                         <td>
                           <div>
                             {d.vehicleClass} · {d.vehiclePlate || "—"}
                           </div>
-                          {d.vehiclePhotoUrl ? (
-                            <img
-                              src={d.vehiclePhotoUrl}
-                              alt="Vehicle"
-                              style={{
-                                marginTop: 8,
-                                width: 120,
-                                height: 80,
-                                objectFit: "cover",
-                                borderRadius: 6,
-                              }}
-                            />
-                          ) : (
-                            <div className="muted">No vehicle photo</div>
-                          )}
+                          <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                            {d.selfiePhotoUrl && (
+                              <img
+                                src={d.selfiePhotoUrl}
+                                alt="Selfie"
+                                title="Live selfie"
+                                style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6 }}
+                              />
+                            )}
+                            {d.vehiclePhotoUrl && (
+                              <img
+                                src={d.vehiclePhotoUrl}
+                                alt="Vehicle"
+                                title="Live vehicle"
+                                style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6 }}
+                              />
+                            )}
+                          </div>
                         </td>
                         <td className="row-actions">
                           <button
