@@ -67,3 +67,9 @@
 4. Billing → Generate statement (statement pay-mode org with invoiced jobs)
 5. Keys → Create / Revoke
 6. Ship → Multi-stop with ≥2 addresses
+
+## Production
+
+- Portal: https://vuush-enterprise.vercel.app (`VITE_API_BASE_URL` → Railway)
+- API: https://vuush-production.up.railway.app (migrate on deploy via Dockerfile)
+- Marketing Enterprise CTA → `vuush-enterprise.vercel.app`
