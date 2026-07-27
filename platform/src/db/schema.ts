@@ -862,3 +862,77 @@ export const incidentNotifications = pgTable(
     ),
   ],
 );
+
+/** M7 — Enterprise orgs (B2B). */
+export const organisations = pgTable(
+  "organisations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    status: text("status").notNull().default("active"),
+    billingEmail: text("billing_email"),
+    approvalThresholdCents: integer("approval_threshold_cents"),
+    payMode: text("pay_mode").notNull().default("statement"),
+    cityCode: text("city_code").notNull().default("CPT"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("organisations_name_uidx").on(table.name),
+    index("organisations_status_idx").on(table.status),
+  ],
+);
+
+export const orgMemberships = pgTable(
+  "org_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organisations.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** org_admin | booker | approver | viewer */
+    role: text("role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("org_memberships_org_user_uidx").on(table.orgId, table.userId),
+    index("org_memberships_user_idx").on(table.userId),
+  ],
+);
+
+export const orgSites = pgTable(
+  "org_sites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organisations.id),
+    label: text("label").notNull(),
+    address: text("address").notNull(),
+    zoneCode: text("zone_code"),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    /** warehouse | store | other */
+    kind: text("kind").notNull().default("other"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("org_sites_org_idx").on(table.orgId)],
+);
+
+export type Organisation = typeof organisations.$inferSelect;
+export type OrgMembership = typeof orgMemberships.$inferSelect;
+export type OrgSite = typeof orgSites.$inferSelect;

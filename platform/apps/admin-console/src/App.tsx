@@ -19,12 +19,16 @@ import {
   fetchProhibited,
   fetchReasonCodes,
   fetchServiceTypes,
+  createOrganisation,
   fetchDriverApplications,
+  fetchOrganisations,
   fetchStaff,
   fetchZones,
   freezeJobEarnings,
   grantRole,
+  inviteOrgMember,
   reviewDriverApplication,
+  updateOrganisation,
   openBreakGlass,
   patchFlag,
   patchPricingParam,
@@ -37,6 +41,7 @@ import {
   revokeRole,
   verifyMfa,
   verifyOtp,
+  type AdminOrganisation,
   type FinanceEarning,
   type PayoutBatch,
   type PayoutItem,
@@ -89,6 +94,7 @@ type Nav =
   | "home"
   | "staff"
   | "drivers"
+  | "orgs"
   | "zones"
   | "services"
   | "reasons"
@@ -278,6 +284,14 @@ function Console({
   const [driverApps, setDriverApps] = useState<
     Awaited<ReturnType<typeof fetchDriverApplications>>["applications"]
   >([]);
+  const [orgs, setOrgs] = useState<AdminOrganisation[]>([]);
+  const [orgForm, setOrgForm] = useState({
+    name: "",
+    billingEmail: "",
+    inviteEmail: "",
+    inviteName: "",
+  });
+  const [inviteOrgId, setInviteOrgId] = useState<string>("");
   const [audit, setAudit] = useState<Awaited<ReturnType<typeof fetchAudit>>["events"]>([]);
   const [auditQ, setAuditQ] = useState("");
   const [glass, setGlass] = useState<
@@ -336,6 +350,9 @@ function Console({
     if (nav === "staff") setStaff((await fetchStaff(token)).staff);
     if (nav === "drivers") {
       setDriverApps((await fetchDriverApplications(token, "pending_review")).applications);
+    }
+    if (nav === "orgs") {
+      setOrgs((await fetchOrganisations(token)).organisations);
     }
     if (nav === "audit") setAudit((await fetchAudit(token, auditQ || undefined)).events);
     if (nav === "breakglass") setGlass((await fetchBreakGlass(token)).sessions);
@@ -433,6 +450,7 @@ function Console({
       label: "People",
       items: [
         { id: "drivers", label: "Drivers" },
+        { id: "orgs", label: "Organisations" },
         { id: "staff", label: "Staff" },
       ],
     },
@@ -893,6 +911,180 @@ function Console({
                           >
                             Reject
                           </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </section>
+          ) : null}
+
+          {nav === "orgs" ? (
+            <section className="stack">
+              <h1>Organisations</h1>
+              <p className="muted">
+                M7 E0 — create Cape Town pilot orgs and invite an Org Admin. Portal booking comes in E1.
+              </p>
+
+              <div className="panel stack">
+                <h2>Create organisation</h2>
+                <label className="label" htmlFor="org-name">
+                  Company name
+                </label>
+                <input
+                  id="org-name"
+                  className="field"
+                  value={orgForm.name}
+                  onChange={(e) => setOrgForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Acme Warehouse CPT"
+                />
+                <label className="label" htmlFor="org-billing">
+                  Billing email
+                </label>
+                <input
+                  id="org-billing"
+                  className="field"
+                  value={orgForm.billingEmail}
+                  onChange={(e) => setOrgForm((f) => ({ ...f, billingEmail: e.target.value }))}
+                  placeholder="accounts@acme.co.za"
+                />
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={busy || orgForm.name.trim().length < 2}
+                  onClick={() =>
+                    void run(async () => {
+                      await createOrganisation(token, {
+                        name: orgForm.name.trim(),
+                        billingEmail: orgForm.billingEmail.trim() || undefined,
+                        cityCode: "CPT",
+                      });
+                      setOrgForm((f) => ({ ...f, name: "", billingEmail: "" }));
+                      await refresh();
+                    })
+                  }
+                >
+                  Create org
+                </button>
+              </div>
+
+              <div className="panel stack">
+                <h2>Invite Org Admin</h2>
+                <label className="label" htmlFor="invite-org">
+                  Organisation
+                </label>
+                <select
+                  id="invite-org"
+                  className="field"
+                  value={inviteOrgId}
+                  onChange={(e) => setInviteOrgId(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {orgs.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <label className="label" htmlFor="invite-email">
+                  Email
+                </label>
+                <input
+                  id="invite-email"
+                  className="field"
+                  value={orgForm.inviteEmail}
+                  onChange={(e) => setOrgForm((f) => ({ ...f, inviteEmail: e.target.value }))}
+                  placeholder="ops@acme.co.za"
+                />
+                <label className="label" htmlFor="invite-name">
+                  Display name
+                </label>
+                <input
+                  id="invite-name"
+                  className="field"
+                  value={orgForm.inviteName}
+                  onChange={(e) => setOrgForm((f) => ({ ...f, inviteName: e.target.value }))}
+                />
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={busy || !inviteOrgId || !orgForm.inviteEmail.includes("@")}
+                  onClick={() =>
+                    void run(async () => {
+                      await inviteOrgMember(token, inviteOrgId, {
+                        email: orgForm.inviteEmail.trim(),
+                        displayName: orgForm.inviteName.trim() || undefined,
+                        role: "org_admin",
+                      });
+                      setOrgForm((f) => ({ ...f, inviteEmail: "", inviteName: "" }));
+                      await refresh();
+                    })
+                  }
+                >
+                  Invite Org Admin
+                </button>
+              </div>
+
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Organisation</th>
+                    <th>Status</th>
+                    <th>Members</th>
+                    <th>Billing</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {orgs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="muted">
+                        No organisations yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    orgs.map((o) => (
+                      <tr key={o.id}>
+                        <td>
+                          <div>{o.name}</div>
+                          <div className="muted">{o.cityCode}</div>
+                        </td>
+                        <td>{o.status}</td>
+                        <td>{o.memberCount}</td>
+                        <td className="muted">{o.billingEmail || "—"}</td>
+                        <td className="row-actions">
+                          {o.status === "active" ? (
+                            <button
+                              className="btn"
+                              type="button"
+                              onClick={() =>
+                                void run(async () => {
+                                  await updateOrganisation(token, o.id, {
+                                    status: "suspended",
+                                  });
+                                  await refresh();
+                                })
+                              }
+                            >
+                              Suspend
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn-primary"
+                              type="button"
+                              onClick={() =>
+                                void run(async () => {
+                                  await updateOrganisation(token, o.id, {
+                                    status: "active",
+                                  });
+                                  await refresh();
+                                })
+                              }
+                            >
+                              Reactivate
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))

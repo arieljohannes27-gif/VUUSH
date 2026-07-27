@@ -35,7 +35,9 @@
     "console:driver": "npm run dev --prefix apps/driver-app",
     "console:customer": "npm run dev --prefix apps/customer-app",
     "console:support": "npm run dev --prefix apps/support-console",
-    "console:admin": "npm run dev --prefix apps/admin-console"
+    "console:admin": "npm run dev --prefix apps/admin-console",
+    "console:marketing": "npm run dev --prefix apps/marketing-site",
+    "console:enterprise": "npm run dev --prefix apps/enterprise-portal"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

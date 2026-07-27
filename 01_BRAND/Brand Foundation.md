@@ -20,6 +20,17 @@ Technical renaming of legacy code, packages, and infrastructure from prior worki
 
 ---
 
+## Design Principle #1
+
+> **VUUSH is remembered not for what it adds, but for what it has the discipline to leave out.**
+
+Use this in every design review, feature discussion, and marketing decision.  
+Ask before adding anything: **Does this reduce friction?** If not, remove it.
+
+Public website detail: [`Website Design Directive.md`](./Website%20Design%20Directive.md).
+
+---
+
 ## 1. Brand Purpose
 
 VUUSH exists to give people their time back.

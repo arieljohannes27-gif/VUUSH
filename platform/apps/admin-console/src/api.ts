@@ -267,6 +267,65 @@ export async function reviewDriverApplication(
   });
 }
 
+export type AdminOrganisation = {
+  id: string;
+  name: string;
+  status: string;
+  billingEmail: string | null;
+  approvalThresholdCents: number | null;
+  payMode: string;
+  cityCode: string;
+  createdAt: string;
+  memberCount: number;
+};
+
+export async function fetchOrganisations(token: string) {
+  return api<{ organisations: AdminOrganisation[] }>("/v1/admin/orgs", { token });
+}
+
+export async function createOrganisation(
+  token: string,
+  body: {
+    name: string;
+    billingEmail?: string;
+    approvalThresholdCents?: number | null;
+    cityCode?: string;
+  },
+) {
+  return api<{ org: AdminOrganisation }>("/v1/admin/orgs", { token, body });
+}
+
+export async function updateOrganisation(
+  token: string,
+  orgId: string,
+  body: {
+    status?: "active" | "suspended";
+    billingEmail?: string | null;
+    approvalThresholdCents?: number | null;
+  },
+) {
+  return api<{ org: AdminOrganisation }>(`/v1/admin/orgs/${orgId}`, {
+    token,
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function inviteOrgMember(
+  token: string,
+  orgId: string,
+  body: {
+    email: string;
+    displayName?: string;
+    role?: "org_admin" | "booker" | "approver" | "viewer";
+  },
+) {
+  return api<{
+    membership: { id: string; role: string };
+    user: { id: string; email: string | null; displayName: string | null };
+  }>(`/v1/admin/orgs/${orgId}/invite`, { token, body });
+}
+
 export async function grantRole(
   token: string,
   userId: string,

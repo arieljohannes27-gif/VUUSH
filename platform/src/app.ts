@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import { randomUUID } from "node:crypto";
 import { corsOriginList, env } from "./config.js";
 import { adminRoutes } from "./modules/admin/routes.js";
+import { enterpriseRoutes } from "./modules/enterprise/routes.js";
 import { auditRoutes } from "./modules/audit/routes.js";
 import { bookingRoutes } from "./modules/booking/routes.js";
 import { seedBookingCatalog } from "./modules/booking/service.js";
@@ -48,6 +49,7 @@ export async function buildApp() {
   await app.register(executionRoutes);
   await app.register(supportRoutes);
   await app.register(adminRoutes);
+  await app.register(enterpriseRoutes);
 
   app.get("/", async () => ({
     name: "VUUSH Platform",
