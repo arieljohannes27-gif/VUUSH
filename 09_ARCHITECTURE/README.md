@@ -49,7 +49,7 @@ Official enterprise architecture programme for SWIFT Technologies. Each phase is
 | — | `33_BEACHHEAD_GO_LIVE.md` | **Go-live click path** (Supabase · Railway · Vercel) |
 | — | `34_DRIVER_CLEARANCE_DESIGN.md` | **Driver clearance** — password at sign-up + Admin approve |
 | — | `35_M7_ENTERPRISE_DESIGN.md` | **M7 Enterprise (B2B)** — APPROVED TO BUILD (2026-07-26) |
-| — | `36_M7_ENTERPRISE_NOTES.md` | **M7 implementation** — E0–E1 delivered |
+| — | `36_M7_ENTERPRISE_NOTES.md` | **M7 implementation** — E0–E2 delivered |
 | — | `../platform/` | **M0–M8c + M5b maps · VUUSH surface brand** |
 
 ## What comes after baseline

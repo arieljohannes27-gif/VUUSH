@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { db } from "../../db/client.js";
-import { jobs, quotes, serviceTypes, zones } from "../../db/schema.js";
+import { jobs, organisations, quotes, serviceTypes, zones } from "../../db/schema.js";
 import { writeAuditEvent } from "../audit/service.js";
 import { placeHold } from "../dispatch/service.js";
 import {
@@ -50,6 +50,7 @@ export async function listCatalog() {
 
 export async function createDraftJob(input: {
   shipperUserId: string;
+  orgId?: string | null;
   serviceTypeCode: string;
   packageClass: string;
   pickupAddress: string;
@@ -86,6 +87,7 @@ export async function createDraftJob(input: {
     .values({
       publicCode: publicCode(),
       shipperUserId: input.shipperUserId,
+      orgId: input.orgId ?? null,
       state: "DRAFT",
       serviceTypeCode: input.serviceTypeCode,
       packageClass: input.packageClass,
@@ -116,7 +118,11 @@ export async function createDraftJob(input: {
     subjectType: "job",
     subjectId: job.id,
     correlationId: input.correlationId,
-    payload: { state: job.state, publicCode: job.publicCode },
+    payload: {
+      state: job.state,
+      publicCode: job.publicCode,
+      orgId: job.orgId,
+    },
   });
 
   return job;
@@ -212,16 +218,17 @@ export async function confirmJob(input: {
   userId: string;
   isAdmin: boolean;
   methodRef?: string;
+  /** When true, finish a PENDING_APPROVAL job (approver path). */
+  fromApproval?: boolean;
   correlationId?: string;
 }) {
   const job = await getOwnedJob(input.jobId, input.userId, input.isAdmin);
   if (!job) throw new Error("job_not_found");
 
-  const target: JobState = job.scheduledFor ? "SCHEDULED" : "CONFIRMED";
-  if (!canTransition(job.state, target) && !canTransition(job.state, "CONFIRMED")) {
-    throw new Error("illegal_transition");
-  }
-  if (job.state !== "QUOTED") {
+  const fromApproval = Boolean(input.fromApproval);
+  if (fromApproval) {
+    if (job.state !== "PENDING_APPROVAL") throw new Error("illegal_transition");
+  } else if (job.state !== "QUOTED") {
     throw new Error("illegal_transition");
   }
   if (!job.activeQuoteId) throw new Error("quote_required");
@@ -236,22 +243,87 @@ export async function confirmJob(input: {
     throw new Error("quote_expired");
   }
 
+  // E3: org threshold → hold for approver (unless this call is the approval)
+  if (!fromApproval && job.orgId) {
+    const org = await db.query.organisations.findFirst({
+      where: eq(organisations.id, job.orgId),
+    });
+    if (
+      org?.approvalThresholdCents != null &&
+      quote.totalCents >= org.approvalThresholdCents
+    ) {
+      if (!canTransition(job.state, "PENDING_APPROVAL")) {
+        throw new Error("illegal_transition");
+      }
+      const [held] = await db
+        .update(jobs)
+        .set({
+          state: "PENDING_APPROVAL",
+          paymentStatus: "awaiting_approval",
+          updatedAt: new Date(),
+        })
+        .where(eq(jobs.id, job.id))
+        .returning();
+      await writeAuditEvent({
+        actorType: "user",
+        actorId: input.userId,
+        action: "JOB_PENDING_APPROVAL",
+        subjectType: "job",
+        subjectId: job.id,
+        correlationId: input.correlationId,
+        payload: {
+          totalCents: quote.totalCents,
+          thresholdCents: org.approvalThresholdCents,
+          orgId: job.orgId,
+        },
+      });
+      return { job: held, quote, payment: null, needsApproval: true as const };
+    }
+  }
+
+  const target: JobState = job.scheduledFor ? "SCHEDULED" : "CONFIRMED";
+  if (!canTransition(job.state, target) && !canTransition(job.state, "CONFIRMED")) {
+    throw new Error("illegal_transition");
+  }
+
   const { chargeForJobConfirm, createPendingEarningForJob } = await import(
     "../payments/service.js"
   );
 
-  const { payment } = await chargeForJobConfirm({
-    jobId: job.id,
-    payerUserId: input.userId,
-    methodRef: input.methodRef,
-    correlationId: input.correlationId,
-  });
+  let payment: { id: string } | null = null;
+  let paymentStatus = "captured";
+
+  if (job.orgId) {
+    const org = await db.query.organisations.findFirst({
+      where: eq(organisations.id, job.orgId),
+    });
+    if (!org) throw new Error("org_not_found");
+    if (org.payMode === "statement") {
+      paymentStatus = "invoiced";
+    } else {
+      const charged = await chargeForJobConfirm({
+        jobId: job.id,
+        payerUserId: input.userId,
+        methodRef: input.methodRef,
+        correlationId: input.correlationId,
+      });
+      payment = charged.payment;
+    }
+  } else {
+    const charged = await chargeForJobConfirm({
+      jobId: job.id,
+      payerUserId: input.userId,
+      methodRef: input.methodRef,
+      correlationId: input.correlationId,
+    });
+    payment = charged.payment;
+  }
 
   const [updated] = await db
     .update(jobs)
     .set({
       state: target,
-      paymentStatus: "captured",
+      paymentStatus,
       updatedAt: new Date(),
     })
     .where(eq(jobs.id, job.id))
@@ -276,12 +348,14 @@ export async function confirmJob(input: {
       to: target,
       quoteId: quote.id,
       totalCents: quote.totalCents,
-      paymentId: payment.id,
-      paymentStatus: "captured",
+      paymentId: payment?.id ?? null,
+      paymentStatus,
+      orgId: job.orgId,
+      fromApproval,
     },
   });
 
-  return { job: updated, quote, payment };
+  return { job: updated, quote, payment, needsApproval: false as const };
 }
 
 export async function cancelJob(input: {
@@ -341,6 +415,32 @@ export async function listJobsForUser(userId: string, isAdmin: boolean) {
     .where(eq(jobs.shipperUserId, userId))
     .orderBy(desc(jobs.createdAt))
     .limit(100);
+}
+
+export async function listJobsForOrg(orgId: string) {
+  return db
+    .select()
+    .from(jobs)
+    .where(eq(jobs.orgId, orgId))
+    .orderBy(desc(jobs.createdAt))
+    .limit(100);
+}
+
+export async function getJobForOrg(input: {
+  jobId: string;
+  orgId: string;
+}) {
+  const job = await db.query.jobs.findFirst({
+    where: and(eq(jobs.id, input.jobId), eq(jobs.orgId, input.orgId)),
+  });
+  if (!job) return null;
+  let quote = null;
+  if (job.activeQuoteId) {
+    quote = await db.query.quotes.findFirst({
+      where: eq(quotes.id, job.activeQuoteId),
+    });
+  }
+  return { job, quote };
 }
 
 /** Wave-1 customer mutation request — hold + audit; commercial delta later. */

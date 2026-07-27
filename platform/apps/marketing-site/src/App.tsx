@@ -3,7 +3,8 @@ const DRIVER_URL =
 const CUSTOMER_URL =
   import.meta.env.VITE_CUSTOMER_URL ?? "https://vuush-customer.vercel.app";
 const ENTERPRISE_URL =
-  import.meta.env.VITE_ENTERPRISE_URL ?? "http://localhost:5182";
+  import.meta.env.VITE_ENTERPRISE_URL ??
+  "https://vuush-enterprise.vercel.app";
 
 export default function App() {
   return (

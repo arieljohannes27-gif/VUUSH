@@ -3,21 +3,41 @@ import { z } from "zod";
 import { requireAuth, requireRoles } from "../../plugins/auth.js";
 import {
   assertOrgMembership,
+  attachJobStops,
+  canApproveShipments,
+  canBookShipments,
   canManageOrg,
   canManageSites,
+  createOrgApiKey,
   createOrganisation,
   createOrgSite,
+  generateWeeklyStatement,
   getOrganisation,
+  getOrgInvoice,
   getPortalHome,
   inviteOrgMember,
   listActiveZones,
+  listJobStops,
   listMyOrgMemberships,
+  listOrgApiKeys,
+  listOrgInvoices,
   listOrganisations,
   listOrgMembers,
   listOrgSites,
+  listPendingApprovalJobs,
+  revokeOrgApiKey,
   updateOrganisation,
   updateOrgSite,
 } from "./service.js";
+import {
+  cancelJob,
+  confirmJob,
+  createDraftJob,
+  getJobForOrg,
+  listCatalog,
+  listJobsForOrg,
+  quoteJob,
+} from "../booking/service.js";
 
 const adminOnly = ["administrator"] as const;
 
@@ -34,13 +54,29 @@ function mapError(err: unknown) {
   const status =
     message === "org_not_found" ||
     message === "user_not_found" ||
-    message === "site_not_found"
+    message === "site_not_found" ||
+    message === "invoice_not_found" ||
+    message === "api_key_not_found" ||
+    message === "job_not_found"
       ? 404
       : message === "org_name_taken" || message === "already_member"
         ? 409
-        : message === "not_org_member" || message === "org_not_active" || message === "forbidden_role"
+        : message === "not_org_member" ||
+            message === "org_not_active" ||
+            message === "forbidden_role"
           ? 403
-          : 400;
+          : message === "no_billable_jobs" ||
+              message === "stops_min_two" ||
+              message === "illegal_transition" ||
+              message === "quote_expired" ||
+              message === "quote_required" ||
+              message === "payment_failed" ||
+              message === "zone_unserviceable" ||
+              message === "service_type_invalid" ||
+              message === "prohibited_goods_declaration_required" ||
+              message === "prohibited_goods_blocked"
+            ? 400
+            : 400;
   return { status, error: message };
 }
 
@@ -353,6 +389,436 @@ export async function enterpriseRoutes(app: FastifyInstance) {
         const mapped = mapError(err);
         return reply.status(mapped.status).send({ error: mapped.error });
       }
+    },
+  );
+
+  /* —— E2 Shipments —— */
+
+  app.get(
+    "/v1/enterprise/catalog",
+    { preHandler: requireOrgContext },
+    async () => listCatalog(),
+  );
+
+  app.get(
+    "/v1/enterprise/jobs",
+    { preHandler: requireOrgContext },
+    async (request) => ({
+      jobs: await listJobsForOrg(request.orgContext!.orgId),
+    }),
+  );
+
+  app.get(
+    "/v1/enterprise/jobs/:jobId",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const detail = await getJobForOrg({
+        jobId,
+        orgId: request.orgContext!.orgId,
+      });
+      if (!detail) {
+        return reply.status(404).send({ error: "job_not_found" });
+      }
+      return detail;
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/jobs",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canBookShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const parsed = z
+        .object({
+          serviceTypeCode: z.string().min(2),
+          packageClass: z.enum(["small", "medium", "large"]).default("small"),
+          pickupAddress: z.string().min(3),
+          pickupZoneCode: z.string().min(2),
+          dropoffAddress: z.string().min(3),
+          dropoffZoneCode: z.string().min(2),
+          recipientName: z.string().optional(),
+          recipientPhone: z.string().optional(),
+          notes: z.string().optional(),
+          prohibitedGoodsDeclared: z.literal(true),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const job = await createDraftJob({
+          ...parsed.data,
+          shipperUserId: request.authUser!.id,
+          orgId: request.orgContext!.orgId,
+          containsProhibitedGoods: false,
+          correlationId: request.id,
+        });
+        return reply.status(201).send({ job });
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/jobs/:jobId/quote",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canBookShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const { jobId } = request.params as { jobId: string };
+      const detail = await getJobForOrg({
+        jobId,
+        orgId: request.orgContext!.orgId,
+      });
+      if (!detail) {
+        return reply.status(404).send({ error: "job_not_found" });
+      }
+      try {
+        const result = await quoteJob({
+          jobId,
+          userId: request.authUser!.id,
+          isAdmin: request.orgContext!.role === "org_admin",
+          correlationId: request.id,
+        });
+        return result;
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/jobs/:jobId/confirm",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canBookShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const { jobId } = request.params as { jobId: string };
+      const detail = await getJobForOrg({
+        jobId,
+        orgId: request.orgContext!.orgId,
+      });
+      if (!detail) {
+        return reply.status(404).send({ error: "job_not_found" });
+      }
+      try {
+        const result = await confirmJob({
+          jobId,
+          userId: request.authUser!.id,
+          isAdmin: request.orgContext!.role === "org_admin",
+          correlationId: request.id,
+        });
+        return result;
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  /* —— E3 Approvals —— */
+
+  app.get(
+    "/v1/enterprise/approvals",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canApproveShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      return {
+        jobs: await listPendingApprovalJobs(request.orgContext!.orgId),
+      };
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/jobs/:jobId/approve",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canApproveShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const { jobId } = request.params as { jobId: string };
+      const detail = await getJobForOrg({
+        jobId,
+        orgId: request.orgContext!.orgId,
+      });
+      if (!detail) {
+        return reply.status(404).send({ error: "job_not_found" });
+      }
+      try {
+        const result = await confirmJob({
+          jobId,
+          userId: request.authUser!.id,
+          isAdmin: true,
+          fromApproval: true,
+          correlationId: request.id,
+        });
+        return result;
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/jobs/:jobId/reject",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canApproveShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const { jobId } = request.params as { jobId: string };
+      const detail = await getJobForOrg({
+        jobId,
+        orgId: request.orgContext!.orgId,
+      });
+      if (!detail) {
+        return reply.status(404).send({ error: "job_not_found" });
+      }
+      try {
+        const job = await cancelJob({
+          jobId,
+          userId: request.authUser!.id,
+          isAdmin: true,
+          correlationId: request.id,
+        });
+        return { job };
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.patch(
+    "/v1/enterprise/settings",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canManageOrg(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const parsed = z
+        .object({
+          approvalThresholdCents: z.number().int().nonnegative().nullable(),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const org = await updateOrganisation({
+          orgId: request.orgContext!.orgId,
+          approvalThresholdCents: parsed.data.approvalThresholdCents,
+          actorUserId: request.authUser!.id,
+          correlationId: request.id,
+        });
+        return { org };
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  /* —— E4 Statements —— */
+
+  app.get(
+    "/v1/enterprise/statements",
+    { preHandler: requireOrgContext },
+    async (request) => ({
+      statements: await listOrgInvoices(request.orgContext!.orgId),
+    }),
+  );
+
+  app.get(
+    "/v1/enterprise/statements/:invoiceId",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      const { invoiceId } = request.params as { invoiceId: string };
+      try {
+        return await getOrgInvoice(request.orgContext!.orgId, invoiceId);
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/statements/generate",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canManageOrg(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      try {
+        const invoice = await generateWeeklyStatement({
+          orgId: request.orgContext!.orgId,
+          actorUserId: request.authUser!.id,
+          correlationId: request.id,
+        });
+        return reply.status(201).send({ invoice });
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  /* —— E5 API keys —— */
+
+  app.get(
+    "/v1/enterprise/api-keys",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canManageOrg(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      return { keys: await listOrgApiKeys(request.orgContext!.orgId) };
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/api-keys",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canManageOrg(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const parsed = z
+        .object({ name: z.string().min(1).max(80).default("default") })
+        .safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const result = await createOrgApiKey({
+          orgId: request.orgContext!.orgId,
+          name: parsed.data.name,
+          actorUserId: request.authUser!.id,
+          correlationId: request.id,
+        });
+        return reply.status(201).send({
+          key: {
+            id: result.key.id,
+            name: result.key.name,
+            keyPrefix: result.key.keyPrefix,
+            createdAt: result.key.createdAt,
+          },
+          secret: result.secret,
+        });
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.post(
+    "/v1/enterprise/api-keys/:keyId/revoke",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canManageOrg(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const { keyId } = request.params as { keyId: string };
+      try {
+        const key = await revokeOrgApiKey({
+          orgId: request.orgContext!.orgId,
+          keyId,
+          actorUserId: request.authUser!.id,
+          correlationId: request.id,
+        });
+        return { key };
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  /* —— E6 Multi-stop —— */
+
+  app.post(
+    "/v1/enterprise/jobs/multi-stop",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      if (!canBookShipments(request.orgContext!.role)) {
+        return reply.status(403).send({ error: "forbidden_role" });
+      }
+      const parsed = z
+        .object({
+          serviceTypeCode: z.string().min(2),
+          packageClass: z.enum(["small", "medium", "large"]).default("small"),
+          stops: z
+            .array(
+              z.object({
+                label: z.string().optional(),
+                address: z.string().min(3),
+                zoneCode: z.string().min(2).optional(),
+              }),
+            )
+            .min(2)
+            .max(20),
+          notes: z.string().optional(),
+          prohibitedGoodsDeclared: z.literal(true),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      const stops = parsed.data.stops;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      try {
+        const job = await createDraftJob({
+          shipperUserId: request.authUser!.id,
+          orgId: request.orgContext!.orgId,
+          serviceTypeCode: parsed.data.serviceTypeCode,
+          packageClass: parsed.data.packageClass,
+          pickupAddress: first.address,
+          pickupZoneCode: first.zoneCode ?? "CPT-CBD",
+          dropoffAddress: last.address,
+          dropoffZoneCode: last.zoneCode ?? first.zoneCode ?? "CPT-CBD",
+          notes:
+            (parsed.data.notes ? `${parsed.data.notes} · ` : "") +
+            `Multi-stop (${stops.length} stops — your stop order)`,
+          prohibitedGoodsDeclared: true,
+          containsProhibitedGoods: false,
+          correlationId: request.id,
+        });
+        const stopRows = await attachJobStops({ jobId: job.id, stops });
+        return reply.status(201).send({ job, stops: stopRows });
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  app.get(
+    "/v1/enterprise/jobs/:jobId/stops",
+    { preHandler: requireOrgContext },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const detail = await getJobForOrg({
+        jobId,
+        orgId: request.orgContext!.orgId,
+      });
+      if (!detail) {
+        return reply.status(404).send({ error: "job_not_found" });
+      }
+      return { stops: await listJobStops(jobId) };
     },
   );
 }

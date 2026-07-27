@@ -89,13 +89,14 @@ For **each** app below, **Add New Project** from the same GitHub repo:
 | `vuush-customer` | `platform/apps/customer-app` | same |
 | `vuush-driver` | `platform/apps/driver-app` | same |
 | `vuush-support` | `platform/apps/support-console` | same |
+| `vuush-enterprise` | `platform/apps/enterprise-portal` | same |
 
 Framework: Vite. Build: `npm run build`. Output: `dist`.
 
-After all five have URLs, go back to Railway and set:
+After apps have URLs, go back to Railway and set:
 
 ```text
-CORS_ORIGINS=https://vuush-admin.vercel.app,https://vuush-dispatch.vercel.app,https://vuush-customer.vercel.app,https://vuush-driver.vercel.app,https://vuush-support.vercel.app
+CORS_ORIGINS=https://vuush.vercel.app,https://vuush-admin.vercel.app,https://vuush-dispatch.vercel.app,https://vuush-customer.vercel.app,https://vuush-7j3u.vercel.app,https://vuush-support.vercel.app,https://vuush-enterprise.vercel.app
 ```
 
 (Use your real Vercel URLs.) Redeploy API once.

@@ -1,10 +1,16 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { createHash, randomBytes } from "node:crypto";
 import { db } from "../../db/client.js";
 import {
   jobs,
+  jobStops,
+  orgApiKeys,
+  orgInvoiceLines,
+  orgInvoices,
   orgMemberships,
   organisations,
   orgSites,
+  quotes,
   users,
   zones,
 } from "../../db/schema.js";
@@ -340,13 +346,19 @@ export async function getPortalHome(orgId: string) {
         sql`${jobs.createdAt} >= date_trunc('day', now())`,
       ),
     );
+  const [pending] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(jobs)
+    .where(
+      and(eq(jobs.orgId, orgId), eq(jobs.state, "PENDING_APPROVAL")),
+    );
 
   return {
     sites: siteCount?.n ?? 0,
     members: memberCount?.n ?? 0,
     liveShipments: liveJobs?.n ?? 0,
     todayShipments: todayJobs?.n ?? 0,
-    pendingApprovals: 0,
+    pendingApprovals: pending?.n ?? 0,
   };
 }
 
@@ -481,4 +493,229 @@ export function canManageOrg(role: string) {
 
 export function canManageSites(role: string) {
   return role === "org_admin" || role === "booker";
+}
+
+export function canBookShipments(role: string) {
+  return role === "org_admin" || role === "booker";
+}
+
+export function canApproveShipments(role: string) {
+  return role === "org_admin" || role === "approver";
+}
+
+export async function listPendingApprovalJobs(orgId: string) {
+  return db
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.orgId, orgId), eq(jobs.state, "PENDING_APPROVAL")))
+    .orderBy(jobs.createdAt);
+}
+
+export async function listOrgInvoices(orgId: string) {
+  return db
+    .select()
+    .from(orgInvoices)
+    .where(eq(orgInvoices.orgId, orgId))
+    .orderBy(desc(orgInvoices.createdAt));
+}
+
+export async function getOrgInvoice(orgId: string, invoiceId: string) {
+  const invoice = await db.query.orgInvoices.findFirst({
+    where: and(eq(orgInvoices.id, invoiceId), eq(orgInvoices.orgId, orgId)),
+  });
+  if (!invoice) throw new Error("invoice_not_found");
+  const lines = await db
+    .select()
+    .from(orgInvoiceLines)
+    .where(eq(orgInvoiceLines.invoiceId, invoiceId));
+  return { invoice, lines };
+}
+
+export async function generateWeeklyStatement(input: {
+  orgId: string;
+  actorUserId: string;
+  correlationId?: string;
+}) {
+  const already = await db.select({ jobId: orgInvoiceLines.jobId }).from(orgInvoiceLines);
+  const billed = new Set(already.map((r) => r.jobId));
+
+  const candidates = await db
+    .select()
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.orgId, input.orgId),
+        eq(jobs.state, "DELIVERED"),
+        eq(jobs.paymentStatus, "invoiced"),
+      ),
+    )
+    .orderBy(jobs.createdAt);
+
+  const eligible = candidates.filter((j) => !billed.has(j.id));
+  if (eligible.length === 0) throw new Error("no_billable_jobs");
+
+  const quotesById = new Map<string, number>();
+  for (const j of eligible) {
+    if (!j.activeQuoteId) continue;
+    const q = await db.query.quotes.findFirst({ where: eq(quotes.id, j.activeQuoteId) });
+    quotesById.set(j.id, q?.totalCents ?? 0);
+  }
+
+  const periodStart = eligible[0].createdAt;
+  const periodEnd = eligible[eligible.length - 1].createdAt;
+  let total = 0;
+  const csvRows = ["public_code,pickup,dropoff,amount_cents,delivered_at"];
+  for (const j of eligible) {
+    const amount = quotesById.get(j.id) ?? 0;
+    total += amount;
+    csvRows.push(
+      [
+        j.publicCode,
+        JSON.stringify(j.pickupAddress),
+        JSON.stringify(j.dropoffAddress),
+        String(amount),
+        j.updatedAt.toISOString(),
+      ].join(","),
+    );
+  }
+
+  const [invoice] = await db
+    .insert(orgInvoices)
+    .values({
+      orgId: input.orgId,
+      periodStart,
+      periodEnd,
+      totalCents: total,
+      currency: "ZAR",
+      status: "issued",
+      csvBody: csvRows.join("\n"),
+    })
+    .returning();
+
+  for (const j of eligible) {
+    await db.insert(orgInvoiceLines).values({
+      invoiceId: invoice.id,
+      jobId: j.id,
+      publicCode: j.publicCode,
+      description: `${j.pickupAddress} → ${j.dropoffAddress}`,
+      amountCents: quotesById.get(j.id) ?? 0,
+    });
+  }
+
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: input.actorUserId,
+    action: "ORG_STATEMENT_GENERATED",
+    subjectType: "organisation",
+    subjectId: input.orgId,
+    correlationId: input.correlationId,
+    payload: { invoiceId: invoice.id, totalCents: total, lines: eligible.length },
+  });
+
+  return invoice;
+}
+
+export async function listOrgApiKeys(orgId: string) {
+  return db
+    .select({
+      id: orgApiKeys.id,
+      name: orgApiKeys.name,
+      keyPrefix: orgApiKeys.keyPrefix,
+      createdAt: orgApiKeys.createdAt,
+      revokedAt: orgApiKeys.revokedAt,
+    })
+    .from(orgApiKeys)
+    .where(eq(orgApiKeys.orgId, orgId))
+    .orderBy(desc(orgApiKeys.createdAt));
+}
+
+export async function createOrgApiKey(input: {
+  orgId: string;
+  name: string;
+  actorUserId: string;
+  correlationId?: string;
+}) {
+  const raw = `vuush_${randomBytes(24).toString("hex")}`;
+  const keyPrefix = raw.slice(0, 12);
+  const keyHash = createHash("sha256").update(raw).digest("hex");
+  const [row] = await db
+    .insert(orgApiKeys)
+    .values({
+      orgId: input.orgId,
+      name: input.name.trim() || "default",
+      keyPrefix,
+      keyHash,
+      createdByUserId: input.actorUserId,
+    })
+    .returning();
+
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: input.actorUserId,
+    action: "ORG_API_KEY_CREATED",
+    subjectType: "organisation",
+    subjectId: input.orgId,
+    correlationId: input.correlationId,
+    payload: { keyId: row.id, keyPrefix },
+  });
+
+  return { key: row, secret: raw };
+}
+
+export async function revokeOrgApiKey(input: {
+  orgId: string;
+  keyId: string;
+  actorUserId: string;
+  correlationId?: string;
+}) {
+  const existing = await db.query.orgApiKeys.findFirst({
+    where: and(eq(orgApiKeys.id, input.keyId), eq(orgApiKeys.orgId, input.orgId)),
+  });
+  if (!existing) throw new Error("api_key_not_found");
+  const [row] = await db
+    .update(orgApiKeys)
+    .set({ revokedAt: new Date() })
+    .where(eq(orgApiKeys.id, input.keyId))
+    .returning();
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: input.actorUserId,
+    action: "ORG_API_KEY_REVOKED",
+    subjectType: "organisation",
+    subjectId: input.orgId,
+    correlationId: input.correlationId,
+    payload: { keyId: input.keyId },
+  });
+  return row;
+}
+
+export async function listJobStops(jobId: string) {
+  return db
+    .select()
+    .from(jobStops)
+    .where(eq(jobStops.jobId, jobId))
+    .orderBy(jobStops.sequence);
+}
+
+export async function attachJobStops(input: {
+  jobId: string;
+  stops: Array<{ label?: string; address: string; zoneCode?: string }>;
+}) {
+  if (input.stops.length < 2) throw new Error("stops_min_two");
+  const rows = [];
+  for (let i = 0; i < input.stops.length; i++) {
+    const s = input.stops[i];
+    const [row] = await db
+      .insert(jobStops)
+      .values({
+        jobId: input.jobId,
+        sequence: i + 1,
+        label: s.label?.trim() || `Stop ${i + 1}`,
+        address: s.address.trim(),
+        zoneCode: s.zoneCode?.trim() || null,
+      })
+      .returning();
+    rows.push(row);
+  }
+  return rows;
 }

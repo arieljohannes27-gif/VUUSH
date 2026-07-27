@@ -936,3 +936,93 @@ export const orgSites = pgTable(
 export type Organisation = typeof organisations.$inferSelect;
 export type OrgMembership = typeof orgMemberships.$inferSelect;
 export type OrgSite = typeof orgSites.$inferSelect;
+
+/** M7 E4 — weekly statements */
+export const orgInvoices = pgTable(
+  "org_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organisations.id),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    currency: text("currency").notNull().default("ZAR"),
+    totalCents: integer("total_cents").notNull().default(0),
+    status: text("status").notNull().default("issued"),
+    csvBody: text("csv_body"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("org_invoices_org_idx").on(table.orgId, table.createdAt)],
+);
+
+export const orgInvoiceLines = pgTable(
+  "org_invoice_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => orgInvoices.id),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id),
+    publicCode: text("public_code").notNull(),
+    description: text("description").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+  },
+  (table) => [
+    index("org_invoice_lines_invoice_idx").on(table.invoiceId),
+    uniqueIndex("org_invoice_lines_job_uidx").on(table.jobId),
+  ],
+);
+
+/** M7 E5 — API keys (secret shown once) */
+export const orgApiKeys = pgTable(
+  "org_api_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organisations.id),
+    name: text("name").notNull(),
+    keyPrefix: text("key_prefix").notNull(),
+    keyHash: text("key_hash").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("org_api_keys_org_idx").on(table.orgId),
+    uniqueIndex("org_api_keys_prefix_uidx").on(table.keyPrefix),
+  ],
+);
+
+/** M7 E6 — multi-stop runs (booker order — not optimiser) */
+export const jobStops = pgTable(
+  "job_stops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id),
+    sequence: integer("sequence").notNull(),
+    label: text("label"),
+    address: text("address").notNull(),
+    zoneCode: text("zone_code"),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    status: text("status").notNull().default("pending"),
+    proofNote: text("proof_note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("job_stops_job_idx").on(table.jobId, table.sequence),
+    uniqueIndex("job_stops_job_seq_uidx").on(table.jobId, table.sequence),
+  ],
+);
