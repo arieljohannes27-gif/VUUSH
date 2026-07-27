@@ -1,0 +1,6 @@
+{
+  "installCommand": "cd platform/apps/marketing-site && npm install",
+  "buildCommand": "cd platform/apps/marketing-site && npm run build",
+  "outputDirectory": "platform/apps/marketing-site/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
