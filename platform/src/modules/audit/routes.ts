@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { isDev } from "../../config.js";
 import { writeAuditEvent } from "./service.js";
 
 const bodySchema = z.object({
@@ -13,11 +14,13 @@ const bodySchema = z.object({
 });
 
 /**
- * M0 probe endpoint — proves audit write path.
- * Not a public product API; protect/remove before production exposure.
+ * M0 probe endpoint — local/dev only. Disabled in staging/production.
  */
 export async function auditRoutes(app: FastifyInstance) {
   app.post("/internal/audit-events", async (request, reply) => {
+    if (!isDev()) {
+      return reply.status(404).send({ error: "not_found" });
+    }
     const parsed = bodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({

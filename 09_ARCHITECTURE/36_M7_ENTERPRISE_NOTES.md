@@ -58,6 +58,7 @@
 - Table `job_stops` · `POST /v1/enterprise/jobs/multi-stop` · `GET .../stops`
 - Copy: **your stop order** (no smart reordering)
 - Portal Ship multi-stop: addresses one per line → quote → confirm
+- **Stop order map**: Ship → View stop order map (Leaflet / OSM). Pins follow booker order; zone centroids for Cape Town pilot zones — not address geocoding, not optimiser
 
 ## Local verify
 
@@ -73,3 +74,9 @@
 - Portal: https://vuush-enterprise.vercel.app (`VITE_API_BASE_URL` → Railway)
 - API: https://vuush-production.up.railway.app (migrate on deploy via Dockerfile)
 - Marketing Enterprise CTA → `vuush-enterprise.vercel.app`
+
+## Self-serve signup
+
+- `POST /v1/enterprise/signup` — company name + name + email + password → Org Admin session
+- Portal: Sign up / Sign in (password); email code kept as fallback
+- **Passwords cannot be viewed** (hashed). Admin → Organisations → Members → **Reset password** issues a temporary password once

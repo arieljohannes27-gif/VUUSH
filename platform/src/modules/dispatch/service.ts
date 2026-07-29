@@ -451,9 +451,11 @@ export async function assignJob(input: {
   if (job.state !== "CONFIRMED" && job.state !== "SCHEDULED") {
     throw new Error("illegal_transition");
   }
+  // captured = card paid; not_required = free/internal; invoiced = enterprise statement
   if (
     job.paymentStatus !== "captured" &&
-    job.paymentStatus !== "not_required"
+    job.paymentStatus !== "not_required" &&
+    job.paymentStatus !== "invoiced"
   ) {
     throw new Error("payment_not_ready");
   }
@@ -949,9 +951,6 @@ export async function updateDriverProfileBundle(
     bio?: string | null;
     vehicleClass?: string;
     homeZoneCode?: string | null;
-    licenceStatus?: string;
-    vehicleDocStatus?: string;
-    insuranceStatus?: string;
     displayName?: string | null;
     phone?: string | null;
   },
@@ -960,13 +959,6 @@ export async function updateDriverProfileBundle(
     where: eq(driverProfiles.userId, userId),
   });
   if (!existing) throw new Error("driver_profile_missing");
-
-  for (const key of ["licenceStatus", "vehicleDocStatus", "insuranceStatus"] as const) {
-    const v = patch[key];
-    if (v != null && !DOC_STATUSES.includes(v as (typeof DOC_STATUSES)[number])) {
-      throw new Error("invalid_doc_status");
-    }
-  }
 
   const [profile] = await db
     .update(driverProfiles)
@@ -983,9 +975,6 @@ export async function updateDriverProfileBundle(
       vehicleClass: patch.vehicleClass ?? existing.vehicleClass,
       homeZoneCode:
         patch.homeZoneCode !== undefined ? patch.homeZoneCode : existing.homeZoneCode,
-      licenceStatus: patch.licenceStatus ?? existing.licenceStatus,
-      vehicleDocStatus: patch.vehicleDocStatus ?? existing.vehicleDocStatus,
-      insuranceStatus: patch.insuranceStatus ?? existing.insuranceStatus,
       updatedAt: new Date(),
     })
     .where(eq(driverProfiles.id, existing.id))

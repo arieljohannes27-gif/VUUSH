@@ -16,5 +16,5 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY platform/drizzle ./drizzle
 EXPOSE 3000
-# Migrate best-effort, then always start (so /health can pass; check /ready for DB)
-CMD ["sh", "-c", "node dist/db/migrate.js || echo 'migrate_failed_continuing'; node dist/server.js"]
+# Migrate must succeed, then start the API
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/server.js"]

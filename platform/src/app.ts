@@ -22,6 +22,7 @@ export async function buildApp() {
     logger: {
       level: env.LOG_LEVEL,
     },
+    trustProxy: true,
     genReqId: (req) => {
       const incoming = req.headers["x-correlation-id"];
       if (typeof incoming === "string" && incoming.length > 0) return incoming;
@@ -53,54 +54,8 @@ export async function buildApp() {
 
   app.get("/", async () => ({
     name: "VUUSH Platform",
-    modules: [
-      "M0 — Platform foundation",
-      "M1 — Authentication & identity",
-      "M2 — Customer app",
-      "M3 — Booking engine",
-      "M8 — Payments & settlements",
-      "M8a — Support centre",
-      "M8b — Admin portal",
-      "M8c — Incidents & emergency",
-      "M4 — Dispatch engine",
-      "M5 — GPS / tracking",
-      "M6a — Execution & proof",
-      "M6 — Driver app",
-    ],
-    docs: "Project Atlas / 09_ARCHITECTURE",
     health: "/health",
-    customer: {
-      ui: "http://localhost:5175",
-      jobs: "GET /v1/jobs",
-      mutations: "POST /v1/jobs/:id/mutations",
-      support: "POST /v1/support/cases",
-      track: "GET /v1/tracking/jobs/:id/projection",
-    },
-    support: {
-      ui: "http://localhost:5176",
-      desk: "GET /v1/support/desk/cases",
-    },
-    dispatch: {
-      ui: "http://localhost:5173",
-      queue: "GET /v1/dispatch/queue",
-      incidents: "GET /v1/dispatch/incidents",
-    },
-    admin: {
-      ui: "http://localhost:5177",
-      home: "GET /v1/admin/home",
-    },
-    driver: {
-      home: "GET /v1/drivers/me",
-      duty: "POST /v1/drivers/me/duty",
-      earnings: "GET /v1/drivers/me/earnings",
-      emergency: "POST /v1/drivers/me/emergency",
-      ui: "http://localhost:5174",
-    },
-    execution: {
-      pickup: "POST /v1/jobs/:id/execution/pickup",
-      deliver: "POST /v1/jobs/:id/execution/deliver",
-      proofs: "POST /v1/jobs/:id/proofs",
-    },
+    ready: "/ready",
   }));
 
   return app;

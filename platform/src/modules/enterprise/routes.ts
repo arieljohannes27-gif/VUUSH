@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth, requireRoles } from "../../plugins/auth.js";
 import {
   assertOrgMembership,
+  adminResetOrgMemberPassword,
   attachJobStops,
   canApproveShipments,
   canBookShipments,
@@ -26,6 +27,7 @@ import {
   listOrgSites,
   listPendingApprovalJobs,
   revokeOrgApiKey,
+  signupEnterprise,
   updateOrganisation,
   updateOrgSite,
 } from "./service.js";
@@ -59,7 +61,9 @@ function mapError(err: unknown) {
     message === "api_key_not_found" ||
     message === "job_not_found"
       ? 404
-      : message === "org_name_taken" || message === "already_member"
+      : message === "org_name_taken" ||
+          message === "already_member" ||
+          message === "email_taken"
         ? 409
         : message === "not_org_member" ||
             message === "org_not_active" ||
@@ -74,7 +78,11 @@ function mapError(err: unknown) {
               message === "zone_unserviceable" ||
               message === "service_type_invalid" ||
               message === "prohibited_goods_declaration_required" ||
-              message === "prohibited_goods_blocked"
+              message === "prohibited_goods_blocked" ||
+              message === "password_too_short" ||
+              message === "org_name_required" ||
+              message === "display_name_required" ||
+              message === "invalid_email"
             ? 400
             : 400;
   return { status, error: message };
@@ -229,6 +237,57 @@ export async function enterpriseRoutes(app: FastifyInstance) {
       }
     },
   );
+
+  app.post(
+    "/v1/admin/orgs/:orgId/members/:userId/reset-password",
+    { preHandler: requireRoles(...adminOnly) },
+    async (request, reply) => {
+      const { orgId, userId } = request.params as {
+        orgId: string;
+        userId: string;
+      };
+      try {
+        const result = await adminResetOrgMemberPassword({
+          orgId,
+          userId,
+          actorUserId: request.authUser!.id,
+          correlationId: request.id,
+        });
+        return result;
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    },
+  );
+
+  /* —— Public signup —— */
+
+  app.post("/v1/enterprise/signup", async (request, reply) => {
+    const parsed = z
+      .object({
+        companyName: z.string().min(2).max(200),
+        displayName: z.string().min(2).max(200),
+        email: z.string().email(),
+        password: z.string().min(8).max(200),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "validation_error" });
+    }
+    try {
+      const result = await signupEnterprise({
+        ...parsed.data,
+        ipAddress: request.ip,
+        userAgent: request.headers["user-agent"],
+        correlationId: request.id,
+      });
+      return reply.status(201).send(result);
+    } catch (err) {
+      const mapped = mapError(err);
+      return reply.status(mapped.status).send({ error: mapped.error });
+    }
+  });
 
   /* —— Portal (E1) —— */
 

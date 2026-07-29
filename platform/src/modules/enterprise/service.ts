@@ -15,7 +15,8 @@ import {
   zones,
 } from "../../db/schema.js";
 import { writeAuditEvent } from "../audit/service.js";
-import { assignRole } from "../identity/service.js";
+import { hashPassword } from "../identity/crypto.js";
+import { assignRole, createSessionForUser, getUserRoles } from "../identity/service.js";
 
 const ORG_ROLES = ["org_admin", "booker", "approver", "viewer"] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
@@ -101,6 +102,164 @@ export async function getOrganisation(orgId: string) {
     .orderBy(orgSites.createdAt);
 
   return { org, members, sites };
+}
+
+/** Self-serve: company + Org Admin account with password (returned session). */
+export async function signupEnterprise(input: {
+  companyName: string;
+  displayName: string;
+  email: string;
+  password: string;
+  ipAddress?: string;
+  userAgent?: string;
+  correlationId?: string;
+}) {
+  const companyName = input.companyName.trim();
+  const displayName = input.displayName.trim();
+  const email = input.email.trim().toLowerCase();
+  if (companyName.length < 2) throw new Error("org_name_required");
+  if (displayName.length < 2) throw new Error("display_name_required");
+  if (!email.includes("@")) throw new Error("invalid_email");
+  if (input.password.length < 8) throw new Error("password_too_short");
+
+  const nameTaken = await db.query.organisations.findFirst({
+    where: eq(organisations.name, companyName),
+  });
+  if (nameTaken) throw new Error("org_name_taken");
+
+  const existingUser = await db.query.users.findFirst({
+    where: inArray(users.email, emailLookupCandidates(email)),
+  });
+  if (existingUser) throw new Error("email_taken");
+
+  const [org] = await db
+    .insert(organisations)
+    .values({
+      name: companyName,
+      billingEmail: email,
+      payMode: "statement",
+      cityCode: "CPT",
+      status: "active",
+    })
+    .returning();
+
+  const [user] = await db
+    .insert(users)
+    .values({
+      email,
+      displayName,
+      passwordHash: hashPassword(input.password),
+      status: "active",
+    })
+    .returning();
+
+  const [membership] = await db
+    .insert(orgMemberships)
+    .values({
+      orgId: org.id,
+      userId: user.id,
+      role: "org_admin",
+    })
+    .returning();
+
+  await assignRole({
+    userId: user.id,
+    role: "enterprise_customer",
+    scopeType: "org",
+    scopeId: org.id,
+    actorId: user.id,
+    correlationId: input.correlationId,
+  });
+
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: user.id,
+    action: "ORG_SELF_SIGNUP",
+    subjectType: "organisation",
+    subjectId: org.id,
+    correlationId: input.correlationId,
+    payload: { email, membershipId: membership.id },
+  });
+
+  const roles = await getUserRoles(user.id);
+  const session = await createSessionForUser({
+    userId: user.id,
+    mfaSatisfied: true,
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+    correlationId: input.correlationId,
+  });
+
+  return {
+    status: "authenticated" as const,
+    session,
+    user: {
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      displayName: user.displayName,
+      status: user.status,
+      totpEnabled: user.totpEnabled,
+      roles,
+    },
+    org: {
+      id: org.id,
+      name: org.name,
+      cityCode: org.cityCode,
+      payMode: org.payMode,
+    },
+    membership: {
+      orgId: org.id,
+      role: membership.role,
+      membershipId: membership.id,
+    },
+  };
+}
+
+/** Admin cannot read old passwords — only issue a new temporary one (shown once). */
+export async function adminResetOrgMemberPassword(input: {
+  orgId: string;
+  userId: string;
+  actorUserId: string;
+  correlationId?: string;
+}) {
+  const membership = await db.query.orgMemberships.findFirst({
+    where: and(
+      eq(orgMemberships.orgId, input.orgId),
+      eq(orgMemberships.userId, input.userId),
+    ),
+  });
+  if (!membership) throw new Error("not_org_member");
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, input.userId),
+  });
+  if (!user) throw new Error("user_not_found");
+
+  const temporaryPassword = `Vuush-${randomBytes(5).toString("hex")}`;
+  await db
+    .update(users)
+    .set({
+      passwordHash: hashPassword(temporaryPassword),
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, user.id));
+
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: input.actorUserId,
+    action: "ORG_MEMBER_PASSWORD_RESET",
+    subjectType: "user",
+    subjectId: user.id,
+    correlationId: input.correlationId,
+    payload: { orgId: input.orgId, email: user.email },
+  });
+
+  return {
+    userId: user.id,
+    email: user.email,
+    temporaryPassword,
+  };
 }
 
 export async function createOrganisation(input: {
@@ -690,11 +849,37 @@ export async function revokeOrgApiKey(input: {
 }
 
 export async function listJobStops(jobId: string) {
-  return db
+  const rows = await db
     .select()
     .from(jobStops)
     .where(eq(jobStops.jobId, jobId))
     .orderBy(jobStops.sequence);
+
+  // Enrich missing coords from zone centroids (map view — booker order only)
+  return rows.map((row) => {
+    if (row.lat != null && row.lng != null) return row;
+    const coords = coordsForStop(row.zoneCode, row.sequence);
+    return { ...row, lat: coords.lat, lng: coords.lng };
+  });
+}
+
+/** Cape Town pilot zone centres — honest pins for map view (not geocoded addresses). */
+const ZONE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
+  "CPT-CBD": { lat: -33.9249, lng: 18.4241 },
+  "CPT-ATL": { lat: -33.9125, lng: 18.3876 },
+  "CPT-SOU": { lat: -33.9806, lng: 18.465 },
+  "CPT-NOR": { lat: -33.855, lng: 18.64 },
+};
+
+function coordsForStop(zoneCode: string | null | undefined, sequence: number) {
+  const base =
+    ZONE_CENTROIDS[zoneCode?.trim() || ""] ?? ZONE_CENTROIDS["CPT-CBD"];
+  // Fan out same-zone stops so markers stay readable
+  const offset = (sequence - 1) * 0.0035;
+  return {
+    lat: base.lat + offset * 0.25,
+    lng: base.lng + offset,
+  };
 }
 
 export async function attachJobStops(input: {
@@ -705,14 +890,19 @@ export async function attachJobStops(input: {
   const rows = [];
   for (let i = 0; i < input.stops.length; i++) {
     const s = input.stops[i];
+    const sequence = i + 1;
+    const zoneCode = s.zoneCode?.trim() || null;
+    const coords = coordsForStop(zoneCode, sequence);
     const [row] = await db
       .insert(jobStops)
       .values({
         jobId: input.jobId,
-        sequence: i + 1,
-        label: s.label?.trim() || `Stop ${i + 1}`,
+        sequence,
+        label: s.label?.trim() || `Stop ${sequence}`,
         address: s.address.trim(),
-        zoneCode: s.zoneCode?.trim() || null,
+        zoneCode,
+        lat: coords.lat,
+        lng: coords.lng,
       })
       .returning();
     rows.push(row);

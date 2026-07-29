@@ -51,6 +51,7 @@ export async function verifyOtp(challengeId: string, code: string) {
     user?: SessionUser;
     mfa?: { mfaToken: string; ticketId: string; expiresAt: string };
     totpSecret?: string;
+    totpOtpauth?: string;
   }>("/v1/auth/otp/verify", {
     body: { challengeId, code },
   });
@@ -68,18 +69,6 @@ export async function verifyMfa(mfaToken: string, code: string) {
 
 export async function fetchMe(token: string) {
   return api<{ user: SessionUser }>("/v1/me", { token });
-}
-
-export async function assignDevRole(userId: string, role: string) {
-  return api("/v1/dev/assign-role", {
-    body: { userId, role },
-  });
-}
-
-export async function resetStaffMfa(email: string) {
-  return api<{ ok: boolean; userId: string; email: string }>("/v1/dev/reset-mfa", {
-    body: { email },
-  });
 }
 
 export type QueueItem = {

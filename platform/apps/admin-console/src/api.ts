@@ -326,6 +326,37 @@ export async function inviteOrgMember(
   }>(`/v1/admin/orgs/${orgId}/invite`, { token, body });
 }
 
+export async function fetchOrganisation(token: string, orgId: string) {
+  return api<{
+    org: AdminOrganisation;
+    members: Array<{
+      membershipId: string;
+      userId: string;
+      email: string | null;
+      displayName: string | null;
+      role: string;
+      createdAt: string;
+    }>;
+    sites: unknown[];
+  }>(`/v1/admin/orgs/${orgId}`, { token });
+}
+
+/** Returns a new temporary password once. Old passwords cannot be read. */
+export async function resetOrgMemberPassword(
+  token: string,
+  orgId: string,
+  userId: string,
+) {
+  return api<{
+    userId: string;
+    email: string | null;
+    temporaryPassword: string;
+  }>(`/v1/admin/orgs/${orgId}/members/${userId}/reset-password`, {
+    token,
+    body: {},
+  });
+}
+
 export async function grantRole(
   token: string,
   userId: string,

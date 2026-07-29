@@ -78,6 +78,30 @@ export async function verifyOtp(challengeId: string, code: string) {
   });
 }
 
+export async function loginWithPassword(email: string, password: string) {
+  return api<{
+    status: string;
+    session?: { accessToken: string };
+    user?: SessionUser;
+  }>("/v1/auth/password/login", {
+    body: { email, password },
+  });
+}
+
+export async function signupEnterprise(body: {
+  companyName: string;
+  displayName: string;
+  email: string;
+  password: string;
+}) {
+  return api<{
+    status: string;
+    session: { accessToken: string };
+    user: SessionUser;
+    org: { id: string; name: string };
+  }>("/v1/enterprise/signup", { body });
+}
+
 export async function fetchEnterpriseSession(token: string) {
   return api<{ user: SessionUser; memberships: OrgMembership[] }>(
     "/v1/enterprise/session",
@@ -326,4 +350,23 @@ export async function createMultiStopJob(
     orgId,
     body,
   });
+}
+
+export async function fetchJobStops(
+  token: string,
+  orgId: string,
+  jobId: string,
+) {
+  return api<{
+    stops: Array<{
+      id: string;
+      sequence: number;
+      label: string | null;
+      address: string;
+      zoneCode: string | null;
+      lat: number | null;
+      lng: number | null;
+      status: string;
+    }>;
+  }>(`/v1/enterprise/jobs/${jobId}/stops`, { token, orgId });
 }

@@ -45,6 +45,27 @@ const assignRoleSchema = z.object({
 });
 
 export async function identityRoutes(app: FastifyInstance) {
+  await app.register(import("@fastify/rate-limit"), {
+    global: false,
+  });
+
+  const authLimit = {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: "1 minute",
+      },
+    },
+  };
+
+  const otpVerifyLimit = {
+    config: {
+      rateLimit: {
+        max: 20,
+        timeWindow: "1 minute",
+      },
+    },
+  };
   app.post("/v1/auth/drivers/signup", async (request, reply) => {
     const parsed = z
       .object({
@@ -104,7 +125,7 @@ export async function identityRoutes(app: FastifyInstance) {
     return reply.send(result);
   });
 
-  app.post("/v1/auth/password/login", async (request, reply) => {
+  app.post("/v1/auth/password/login", authLimit, async (request, reply) => {
     const parsed = z
       .object({
         email: z.string().email(),
@@ -129,7 +150,7 @@ export async function identityRoutes(app: FastifyInstance) {
     return reply.send(result);
   });
 
-  app.post("/v1/auth/otp/request", async (request, reply) => {
+  app.post("/v1/auth/otp/request", authLimit, async (request, reply) => {
     const parsed = otpRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -137,14 +158,26 @@ export async function identityRoutes(app: FastifyInstance) {
         details: parsed.error.flatten(),
       });
     }
-    const result = await requestOtp({
-      ...parsed.data,
-      correlationId: request.id,
-    });
-    return reply.status(201).send(result);
+    try {
+      const result = await requestOtp({
+        ...parsed.data,
+        correlationId: request.id,
+      });
+      return reply.status(201).send(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "otp_failed";
+      if (
+        message === "otp_email_not_configured" ||
+        message === "otp_sms_not_configured" ||
+        message === "otp_delivery_failed"
+      ) {
+        return reply.status(503).send({ error: message });
+      }
+      throw err;
+    }
   });
 
-  app.post("/v1/auth/otp/verify", async (request, reply) => {
+  app.post("/v1/auth/otp/verify", otpVerifyLimit, async (request, reply) => {
     const parsed = otpVerifySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -164,7 +197,7 @@ export async function identityRoutes(app: FastifyInstance) {
     return reply.send(result);
   });
 
-  app.post("/v1/auth/mfa/verify", async (request, reply) => {
+  app.post("/v1/auth/mfa/verify", otpVerifyLimit, async (request, reply) => {
     const parsed = mfaSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({
@@ -184,7 +217,7 @@ export async function identityRoutes(app: FastifyInstance) {
     return reply.send({ status: "authenticated", ...result });
   });
 
-  app.post("/v1/auth/token/refresh", async (request, reply) => {
+  app.post("/v1/auth/token/refresh", authLimit, async (request, reply) => {
     const parsed = refreshSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({

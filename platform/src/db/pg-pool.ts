@@ -1,6 +1,6 @@
 import pg from "pg";
 
-/** Supabase / hosted Postgres: force SSL without rejecting pooler certs. */
+/** Supabase / Railway / hosted Postgres: force SSL off localhost. */
 export function createPgPool(connectionString: string): pg.Pool {
   let cleaned = connectionString;
   let forcedSsl = false;
@@ -12,12 +12,20 @@ export function createPgPool(connectionString: string): pg.Pool {
       forcedSsl = sslMode === "require" || sslMode === "verify-full";
       u.searchParams.delete("sslmode");
     }
-    if (u.hostname.includes("supabase")) forcedSsl = true;
+    const host = u.hostname.toLowerCase();
+    const local =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host.endsWith(".local");
+    if (!local) forcedSsl = true;
     cleaned = u.toString();
   } catch {
     forcedSsl =
       connectionString.includes("supabase") ||
-      connectionString.includes("sslmode=require");
+      connectionString.includes("sslmode=require") ||
+      (!connectionString.includes("localhost") &&
+        !connectionString.includes("127.0.0.1"));
     cleaned = connectionString.replace(/[?&]sslmode=[^&]*/g, "");
   }
 

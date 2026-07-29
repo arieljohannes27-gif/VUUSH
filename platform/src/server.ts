@@ -23,7 +23,7 @@ async function main() {
   } catch (err) {
     app.log.error(
       { err },
-      "catalog seed failed — API is up; check DATABASE_URL / Supabase",
+      "catalog seed failed — API is up; check DATABASE_URL / Postgres",
     );
   }
 

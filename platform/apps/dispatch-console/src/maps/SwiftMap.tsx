@@ -117,10 +117,18 @@ export function SwiftMap({
       interactive,
     });
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
     mapRef.current = map;
 
+    const ro = new ResizeObserver(() => {
+      map.resize();
+    });
+    ro.observe(containerRef.current);
+    // First paint after layout settles
+    requestAnimationFrame(() => map.resize());
+
     return () => {
+      ro.disconnect();
       for (const anim of animRef.current.values()) {
         if (anim.raf != null) cancelAnimationFrame(anim.raf);
       }

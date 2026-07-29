@@ -98,13 +98,6 @@ export async function dispatchRoutes(app: FastifyInstance) {
           bio: z.string().max(500).nullable().optional(),
           vehicleClass: z.enum(["bike", "car", "van"]).optional(),
           homeZoneCode: z.string().min(2).max(32).nullable().optional(),
-          licenceStatus: z.enum(["pending", "verified", "missing", "expired"]).optional(),
-          vehicleDocStatus: z
-            .enum(["pending", "verified", "missing", "expired"])
-            .optional(),
-          insuranceStatus: z
-            .enum(["pending", "verified", "missing", "expired"])
-            .optional(),
           displayName: z.string().min(1).max(80).nullable().optional(),
           phone: z.string().min(3).max(40).nullable().optional(),
         })

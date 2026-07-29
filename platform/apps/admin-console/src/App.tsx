@@ -21,12 +21,14 @@ import {
   fetchServiceTypes,
   createOrganisation,
   fetchDriverApplications,
+  fetchOrganisation,
   fetchOrganisations,
   fetchStaff,
   fetchZones,
   freezeJobEarnings,
   grantRole,
   inviteOrgMember,
+  resetOrgMemberPassword,
   reviewDriverApplication,
   updateOrganisation,
   openBreakGlass,
@@ -292,6 +294,19 @@ function Console({
     inviteName: "",
   });
   const [inviteOrgId, setInviteOrgId] = useState<string>("");
+  const [orgDetailId, setOrgDetailId] = useState<string>("");
+  const [orgMembers, setOrgMembers] = useState<
+    Array<{
+      membershipId: string;
+      userId: string;
+      email: string | null;
+      displayName: string | null;
+      role: string;
+    }>
+  >([]);
+  const [tempPasswordNotice, setTempPasswordNotice] = useState<string | null>(
+    null,
+  );
   const [audit, setAudit] = useState<Awaited<ReturnType<typeof fetchAudit>>["events"]>([]);
   const [auditQ, setAuditQ] = useState("");
   const [glass, setGlass] = useState<
@@ -924,8 +939,13 @@ function Console({
             <section className="stack">
               <h1>Organisations</h1>
               <p className="muted">
-                M7 E0 — create Cape Town pilot orgs and invite an Org Admin. Portal booking comes in E1.
+                Create orgs, invite people, or open Members to reset a forgotten
+                password (new temporary password only — old ones cannot be
+                viewed).
               </p>
+              {tempPasswordNotice ? (
+                <p className="error">{tempPasswordNotice}</p>
+              ) : null}
 
               <div className="panel stack">
                 <h2>Create organisation</h2>
@@ -1054,6 +1074,24 @@ function Console({
                         <td>{o.memberCount}</td>
                         <td className="muted">{o.billingEmail || "—"}</td>
                         <td className="row-actions">
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={() =>
+                              void run(async () => {
+                                setOrgDetailId(o.id);
+                                setInviteOrgId(o.id);
+                                setTempPasswordNotice(null);
+                                const detail = await fetchOrganisation(
+                                  token,
+                                  o.id,
+                                );
+                                setOrgMembers(detail.members);
+                              })
+                            }
+                          >
+                            Members
+                          </button>
                           {o.status === "active" ? (
                             <button
                               className="btn"
@@ -1091,6 +1129,67 @@ function Console({
                   )}
                 </tbody>
               </table>
+
+              {orgDetailId && orgMembers.length >= 0 ? (
+                <div className="panel stack">
+                  <h2>
+                    Members —{" "}
+                    {orgs.find((o) => o.id === orgDetailId)?.name ?? "Org"}
+                  </h2>
+                  <p className="muted">
+                    Passwords are secret. Reset creates a new temporary password
+                    you can tell the user once.
+                  </p>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Person</th>
+                        <th>Role</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orgMembers.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="muted">
+                            No members.
+                          </td>
+                        </tr>
+                      ) : (
+                        orgMembers.map((m) => (
+                          <tr key={m.membershipId}>
+                            <td>
+                              <div>{m.displayName || m.email || m.userId}</div>
+                              <div className="muted">{m.email}</div>
+                            </td>
+                            <td>{m.role}</td>
+                            <td className="row-actions">
+                              <button
+                                className="btn"
+                                type="button"
+                                onClick={() =>
+                                  void run(async () => {
+                                    const res = await resetOrgMemberPassword(
+                                      token,
+                                      orgDetailId,
+                                      m.userId,
+                                    );
+                                    setTempPasswordNotice(
+                                      `Temporary password for ${res.email ?? m.email}: ${res.temporaryPassword} — show once, then they sign in and can change it later.`,
+                                    );
+                                  })
+                                }
+                              >
+                                Reset password
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </section>
           ) : null}
 

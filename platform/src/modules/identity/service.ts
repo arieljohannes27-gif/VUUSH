@@ -17,6 +17,7 @@ import {
   verifyTotp,
 } from "./crypto.js";
 import { isRole, requiresStaffMfa, type Role } from "./roles.js";
+import { deliverOtp } from "./otp-delivery.js";
 
 function normalizeDestination(channel: "phone" | "email", destination: string) {
   const trimmed = destination.trim();
@@ -64,10 +65,16 @@ export async function requestOtp(input: {
     payload: { channel: input.channel },
   });
 
-  // Stub notifier — replace with SMS/email provider later.
-  console.info(
-    `[vuush-otp] channel=${input.channel} destination=${destination} code=${code}`,
-  );
+  try {
+    await deliverOtp({
+      channel: input.channel,
+      destination,
+      code,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "otp_delivery_failed";
+    throw new Error(message);
+  }
 
   return {
     challengeId: challenge.id,

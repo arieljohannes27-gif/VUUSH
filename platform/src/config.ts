@@ -53,6 +53,14 @@ const envSchema = z.object({
   TRACK_MAX_SPEED_MPS: z.coerce.number().positive().default(55),
   /** Max metres from job dropoff to allow complete delivery. */
   PROOF_DROPOFF_RADIUS_M: z.coerce.number().positive().default(150),
+  /**
+   * OTP email delivery.
+   * - console: local/dev only (prints code to server logs)
+   * - resend: production email via Resend API
+   */
+  OTP_EMAIL_PROVIDER: z.enum(["console", "resend"]).default("console"),
+  RESEND_API_KEY: z.string().optional().default(""),
+  OTP_EMAIL_FROM: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -64,17 +72,48 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
+const isProdLike =
+  env.NODE_ENV === "production" || env.NODE_ENV === "staging";
+
 if (
-  env.NODE_ENV === "production" &&
+  isProdLike &&
   env.AUTH_PEPPER === "dev-only-change-me-auth-pepper"
 ) {
   console.error("AUTH_PEPPER must be set to a strong secret in production");
   process.exit(1);
 }
 
+if (isProdLike && !env.CORS_ORIGINS.trim()) {
+  console.error(
+    "CORS_ORIGINS must be set in staging/production (comma-separated HTTPS origins)",
+  );
+  process.exit(1);
+}
+
+if (isProdLike && env.OTP_EMAIL_PROVIDER === "console") {
+  console.error(
+    "OTP_EMAIL_PROVIDER=console is not allowed in staging/production — set resend + RESEND_API_KEY + OTP_EMAIL_FROM",
+  );
+  process.exit(1);
+}
+
+if (
+  isProdLike &&
+  env.OTP_EMAIL_PROVIDER === "resend" &&
+  (!env.RESEND_API_KEY.trim() || !env.OTP_EMAIL_FROM.trim())
+) {
+  console.error(
+    "RESEND_API_KEY and OTP_EMAIL_FROM are required when OTP_EMAIL_PROVIDER=resend",
+  );
+  process.exit(1);
+}
+
 export function corsOriginList(): string[] | true {
   const raw = env.CORS_ORIGINS.trim();
-  if (!raw) return true;
+  if (!raw) {
+    // Dev only — production refuses to boot with empty CORS (see checks above).
+    return true;
+  }
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
