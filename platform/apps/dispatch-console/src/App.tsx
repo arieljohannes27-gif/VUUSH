@@ -186,7 +186,7 @@ function humanAuthError(code: string) {
     mfa_not_configured: "Authenticator is not set up. Ask an admin for help.",
     mfa_incomplete: "Authenticator step did not finish.",
     not_staff:
-      "This account is not allowed on Dispatch. Ask an admin for access.",
+      "Email worked, but this account has no Dispatch access yet. In Railway Variables set FOUNDING_DISPATCHER_EMAIL to your Gmail, redeploy, then try again.",
     user_inactive: "This account is inactive.",
   };
   return map[code] ?? code.replaceAll("_", " ");

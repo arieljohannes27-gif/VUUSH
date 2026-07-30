@@ -122,6 +122,10 @@ export function corsOriginList(): string[] | true {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+export function foundingDispatcherConfigured() {
+  return env.FOUNDING_DISPATCHER_EMAIL.trim().length > 0;
+}
+
 export function isDev(): boolean {
   return env.NODE_ENV === "development" || env.NODE_ENV === "test";
 }

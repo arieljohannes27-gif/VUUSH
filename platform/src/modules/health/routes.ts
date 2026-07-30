@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { checkDatabase } from "../../db/client.js";
 import { env } from "../../config.js";
+import { foundingDispatcherConfigured } from "../../config.js";
 import { isFlagEnabled } from "../admin/service.js";
 
 export async function healthRoutes(app: FastifyInstance) {
@@ -22,10 +23,17 @@ export async function healthRoutes(app: FastifyInstance) {
         checks: { database },
       });
     }
-    return { ready: true, checks: { database } };
+    return {
+      ready: true,
+      checks: {
+        database,
+        foundingDispatcherConfigured: foundingDispatcherConfigured(),
+      },
+    };
   });
 
   app.get("/v1/config/beachhead", async () => ({
     mapsExperienceEnabled: await isFlagEnabled("maps_experience_enabled", true),
+    foundingDispatcherConfigured: foundingDispatcherConfigured(),
   }));
 }

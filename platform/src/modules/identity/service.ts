@@ -65,6 +65,12 @@ export async function requestOtp(input: {
     payload: { channel: input.channel },
   });
 
+  // Create user + founding role early so verify does not race access checks.
+  if (input.channel === "email") {
+    const user = await findOrCreateUser("email", destination);
+    await ensureFoundingDispatcherAccess(user);
+  }
+
   try {
     await deliverOtp({
       channel: input.channel,
@@ -129,13 +135,13 @@ export async function getUserRoles(userId: string): Promise<string[]> {
 }
 
 /** One-time founder bootstrap via FOUNDING_DISPATCHER_EMAIL. */
-async function ensureFoundingDispatcherAccess(user: {
+export async function ensureFoundingDispatcherAccess(user: {
   id: string;
   email: string | null;
 }) {
   const founding = env.FOUNDING_DISPATCHER_EMAIL.trim().toLowerCase();
-  if (!founding || !user.email) return;
-  if (user.email.trim().toLowerCase() !== founding) return;
+  if (!founding || !user.email) return false;
+  if (user.email.trim().toLowerCase() !== founding) return false;
 
   const roles = await getUserRoles(user.id);
   if (
@@ -143,17 +149,44 @@ async function ensureFoundingDispatcherAccess(user: {
     roles.includes("administrator") ||
     roles.includes("operations_manager")
   ) {
-    return;
+    return true;
   }
 
-  await assignRole({
-    userId: user.id,
-    role: "dispatcher",
-    scopeType: "platform",
-    scopeId: user.id,
-    actorId: user.id,
-    correlationId: "founding_dispatcher_bootstrap",
+  // Direct insert — avoid unique/scope edge cases from older assign paths.
+  await db
+    .insert(roleBindings)
+    .values({
+      userId: user.id,
+      role: "dispatcher",
+      scopeType: "platform",
+      scopeId: user.id,
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(roleBindings)
+    .values({
+      userId: user.id,
+      role: "administrator",
+      scopeType: "platform",
+      scopeId: user.id,
+    })
+    .onConflictDoNothing();
+
+  await writeAuditEvent({
+    actorType: "system",
+    action: "FOUNDING_DISPATCHER_BOOTSTRAP",
+    subjectType: "user",
+    subjectId: user.id,
+    payload: { email: user.email },
   });
+
+  const next = await getUserRoles(user.id);
+  return (
+    next.includes("dispatcher") ||
+    next.includes("administrator") ||
+    next.includes("operations_manager")
+  );
 }
 
 export async function createSessionForUser(input: {
@@ -362,6 +395,8 @@ export async function verifyMfa(input: {
       .set({ totpEnabled: true, updatedAt: new Date() })
       .where(eq(users.id, user.id));
   }
+
+  await ensureFoundingDispatcherAccess(user);
 
   const roles = await getUserRoles(user.id);
   const session = await createSessionForUser({
