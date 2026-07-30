@@ -54,6 +54,11 @@ const envSchema = z.object({
   /** Max metres from job dropoff to allow complete delivery. */
   PROOF_DROPOFF_RADIUS_M: z.coerce.number().positive().default(150),
   /**
+   * Optional beachhead bootstrap: this email gets dispatcher on first login.
+   * Remove after real staff invite/admin grant is in place.
+   */
+  FOUNDING_DISPATCHER_EMAIL: z.string().optional().default(""),
+  /**
    * OTP email delivery.
    * - console: local/dev only (prints code to server logs)
    * - resend: production email via Resend API

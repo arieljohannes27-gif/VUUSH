@@ -128,6 +128,34 @@ export async function getUserRoles(userId: string): Promise<string[]> {
   return rows.map((r) => r.role);
 }
 
+/** One-time founder bootstrap via FOUNDING_DISPATCHER_EMAIL. */
+async function ensureFoundingDispatcherAccess(user: {
+  id: string;
+  email: string | null;
+}) {
+  const founding = env.FOUNDING_DISPATCHER_EMAIL.trim().toLowerCase();
+  if (!founding || !user.email) return;
+  if (user.email.trim().toLowerCase() !== founding) return;
+
+  const roles = await getUserRoles(user.id);
+  if (
+    roles.includes("dispatcher") ||
+    roles.includes("administrator") ||
+    roles.includes("operations_manager")
+  ) {
+    return;
+  }
+
+  await assignRole({
+    userId: user.id,
+    role: "dispatcher",
+    scopeType: "platform",
+    scopeId: user.id,
+    actorId: user.id,
+    correlationId: "founding_dispatcher_bootstrap",
+  });
+}
+
 export async function createSessionForUser(input: {
   userId: string;
   mfaSatisfied: boolean;
@@ -231,6 +259,8 @@ export async function verifyOtp(input: {
   if (user.status !== "active") {
     return { ok: false as const, error: "user_inactive" };
   }
+
+  await ensureFoundingDispatcherAccess(user);
 
   const roles = await getUserRoles(user.id);
   const staff = requiresStaffMfa(roles);
