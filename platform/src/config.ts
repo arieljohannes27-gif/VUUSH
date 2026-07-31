@@ -97,9 +97,8 @@ if (isProdLike && !env.CORS_ORIGINS.trim()) {
 
 if (isProdLike && env.OTP_EMAIL_PROVIDER === "console") {
   console.error(
-    "OTP_EMAIL_PROVIDER=console is not allowed in staging/production — set resend + RESEND_API_KEY + OTP_EMAIL_FROM",
+    "WARNING: OTP_EMAIL_PROVIDER=console in production — set resend + RESEND_API_KEY + OTP_EMAIL_FROM (OTP emails will not send)",
   );
-  process.exit(1);
 }
 
 if (
@@ -108,9 +107,8 @@ if (
   (!env.RESEND_API_KEY.trim() || !env.OTP_EMAIL_FROM.trim())
 ) {
   console.error(
-    "RESEND_API_KEY and OTP_EMAIL_FROM are required when OTP_EMAIL_PROVIDER=resend",
+    "WARNING: RESEND_API_KEY and OTP_EMAIL_FROM are required when OTP_EMAIL_PROVIDER=resend (OTP emails will fail until set)",
   );
-  process.exit(1);
 }
 
 export function corsOriginList(): string[] | true {
