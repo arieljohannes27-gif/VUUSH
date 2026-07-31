@@ -6,8 +6,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# CMD in Dockerfile runs migrate + server (needs DATABASE_URL)
-healthcheckPath = "/ready"
-healthcheckTimeout = 60
+# Liveness only — /ready needs DB and is too strict for rollouts.
+# CMD still runs migrate before the server listens.
+healthcheckPath = "/health"
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
