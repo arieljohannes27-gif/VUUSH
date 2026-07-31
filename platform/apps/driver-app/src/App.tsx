@@ -426,6 +426,8 @@ export default function App() {
             ? "Add a delivery / signature note first."
             : raw === "otp_delivery_failed" || raw === "otp_email_not_configured"
               ? "We couldn’t email your code. Use the same Gmail as your Resend account, or sign in with password if you already submitted."
+              : raw === "login_incomplete"
+                ? "Sign-in almost finished — tap Confirm again after the next update, or sign in with your password."
               : raw === "email_taken"
                 ? "That email already has an account. Sign in instead."
                 : raw === "Failed to fetch" || raw.startsWith("request_failed_")

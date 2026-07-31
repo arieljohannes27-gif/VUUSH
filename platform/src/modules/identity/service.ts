@@ -242,6 +242,8 @@ export async function verifyOtp(input: {
   ipAddress?: string;
   userAgent?: string;
   correlationId?: string;
+  /** Driver signup/login OTP must not force staff TOTP mid-flow. */
+  skipStaffMfa?: boolean;
 }) {
   const challenge = await db.query.otpChallenges.findFirst({
     where: eq(otpChallenges.id, input.challengeId),
@@ -285,7 +287,7 @@ export async function verifyOtp(input: {
   await ensureFoundingDispatcherAccess(user);
 
   const roles = await getUserRoles(user.id);
-  const staff = requiresStaffMfa(roles);
+  const staff = !input.skipStaffMfa && requiresStaffMfa(roles);
 
   if (staff && user.totpEnabled && user.totpSecret) {
     const ticket = await createMfaTicket(user.id, "totp_login");

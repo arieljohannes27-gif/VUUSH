@@ -198,6 +198,7 @@ export async function verifyDriverSignup(input: {
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
     correlationId: input.correlationId,
+    skipStaffMfa: true,
   });
   if (!result.ok) return result;
   if (result.status !== "authenticated" || !result.session || !result.user) {
