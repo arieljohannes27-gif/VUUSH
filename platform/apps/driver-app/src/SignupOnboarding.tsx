@@ -8,6 +8,7 @@ export type SignupDraft = {
   displayName: string;
   email: string;
   password: string;
+  passwordConfirm: string;
   /** Local digits; UI prefixes +27 */
   phoneLocal: string;
   vehiclePlate: string;
@@ -74,7 +75,8 @@ function stepComplete(step: number, d: SignupDraft): boolean {
       return (
         d.displayName.trim().length > 1 &&
         d.email.trim().includes("@") &&
-        d.password.length >= 8
+        d.password.length >= 8 &&
+        d.passwordConfirm === d.password
       );
     case 2:
       return Boolean(d.idDocUrl && d.licenceDocUrl);
@@ -176,6 +178,28 @@ export function SignupOnboarding({
                 minLength={8}
               />
               <span className="field-hint">At least 8 characters</span>
+            </label>
+            <label className="field-block">
+              <span className="label">Confirm password</span>
+              <input
+                className="field"
+                type="password"
+                value={draft.passwordConfirm}
+                onChange={(e) => onChange({ passwordConfirm: e.target.value })}
+                autoComplete="new-password"
+                minLength={8}
+              />
+              {draft.passwordConfirm.length > 0 &&
+              draft.passwordConfirm !== draft.password ? (
+                <span className="field-hint field-hint-warn">
+                  Passwords don’t match yet
+                </span>
+              ) : draft.passwordConfirm.length > 0 &&
+                draft.passwordConfirm === draft.password ? (
+                <span className="field-hint field-hint-ok">Passwords match</span>
+              ) : (
+                <span className="field-hint">Re-enter the same password</span>
+              )}
             </label>
             <label className="field-block">
               <span className="label">Phone</span>

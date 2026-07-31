@@ -143,6 +143,7 @@ export default function App() {
   const [authView, setAuthView] = useState<AuthView>("landing");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [vehiclePlate, setVehiclePlate] = useState("");
@@ -796,6 +797,7 @@ export default function App() {
                 displayName,
                 email,
                 password,
+                passwordConfirm,
                 phoneLocal: phone,
                 vehiclePlate,
                 vehicleClass,
@@ -811,6 +813,9 @@ export default function App() {
                 if (patch.displayName !== undefined) setDisplayName(patch.displayName);
                 if (patch.email !== undefined) setEmail(patch.email);
                 if (patch.password !== undefined) setPassword(patch.password);
+                if (patch.passwordConfirm !== undefined) {
+                  setPasswordConfirm(patch.passwordConfirm);
+                }
                 if (patch.phoneLocal !== undefined) setPhone(patch.phoneLocal);
                 if (patch.vehiclePlate !== undefined) setVehiclePlate(patch.vehiclePlate);
                 if (patch.vehicleClass !== undefined) setVehicleClass(patch.vehicleClass);

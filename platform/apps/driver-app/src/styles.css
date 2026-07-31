@@ -845,6 +845,14 @@ h3 {
   color: var(--color-text-secondary);
 }
 
+.field-hint-warn {
+  color: var(--color-danger);
+}
+
+.field-hint-ok {
+  color: var(--color-success);
+}
+
 .field-plate {
   letter-spacing: 0.08em;
   text-transform: uppercase;
