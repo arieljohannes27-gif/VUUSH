@@ -3,6 +3,17 @@ import { z } from "zod";
 
 loadEnv();
 
+// Recover a common Railway mistake: API key pasted into OTP_EMAIL_PROVIDER.
+if (process.env.OTP_EMAIL_PROVIDER?.trim().startsWith("re_")) {
+  if (!process.env.RESEND_API_KEY?.trim()) {
+    process.env.RESEND_API_KEY = process.env.OTP_EMAIL_PROVIDER.trim();
+  }
+  process.env.OTP_EMAIL_PROVIDER = "resend";
+  console.error(
+    "WARNING: OTP_EMAIL_PROVIDER looked like a Resend API key — moved it to RESEND_API_KEY and set provider=resend",
+  );
+}
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "staging", "production"])
@@ -90,9 +101,8 @@ if (
 
 if (isProdLike && !env.CORS_ORIGINS.trim()) {
   console.error(
-    "CORS_ORIGINS must be set in staging/production (comma-separated HTTPS origins)",
+    "WARNING: CORS_ORIGINS is empty — using built-in VUUSH beachhead origins until you set the variable",
   );
-  process.exit(1);
 }
 
 if (isProdLike && env.OTP_EMAIL_PROVIDER === "console") {
@@ -111,13 +121,27 @@ if (
   );
 }
 
+/** Known public VUUSH frontends — always allowed in addition to CORS_ORIGINS. */
+const VUUSH_BEACHHEAD_ORIGINS = [
+  "https://vuush.vercel.app",
+  "https://vuush-admin.vercel.app",
+  "https://vuush-dispatch.vercel.app",
+  "https://vuush-customer.vercel.app",
+  "https://vuush-7j3u.vercel.app",
+  "https://vuush-support.vercel.app",
+  "https://vuush-enterprise.vercel.app",
+  "https://vuush.co.za",
+  "https://www.vuush.co.za",
+];
+
 export function corsOriginList(): string[] | true {
   const raw = env.CORS_ORIGINS.trim();
   if (!raw) {
-    // Dev only — production refuses to boot with empty CORS (see checks above).
+    if (isProdLike) return VUUSH_BEACHHEAD_ORIGINS;
     return true;
   }
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const fromEnv = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return [...new Set([...fromEnv, ...VUUSH_BEACHHEAD_ORIGINS])];
 }
 
 export function foundingDispatcherConfigured() {
