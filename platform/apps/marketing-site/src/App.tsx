@@ -7,8 +7,14 @@ const ENTERPRISE_URL =
   "https://vuush-enterprise.vercel.app";
 const CAREERS_EMAIL =
   import.meta.env.VITE_CAREERS_EMAIL ?? "hello@vuush.app";
+const CONTACT_EMAIL =
+  import.meta.env.VITE_CONTACT_EMAIL ?? CAREERS_EMAIL;
+const SITE_DOMAIN =
+  import.meta.env.VITE_SITE_DOMAIN ?? "vuush.co.za";
 
 export default function App() {
+  const year = new Date().getFullYear();
+
   return (
     <div className="site">
       <a className="skip" href="#main">
@@ -141,14 +147,162 @@ export default function App() {
             </div>
           </dl>
         </section>
+
+        <section className="section reference" id="trust">
+          <p className="eyebrow">Trust</p>
+          <h2>For people who look closer.</h2>
+          <dl className="about-list">
+            <div>
+              <dt>Safety</dt>
+              <dd>
+                Drivers are cleared before city work. Jobs stay visible. Money
+                moves with an audit trail.
+              </dd>
+            </div>
+            <div id="coverage">
+              <dt>Coverage</dt>
+              <dd>
+                Beachhead city: Cape Town, South Africa. We expand only when
+                the city is ready.
+              </dd>
+            </div>
+            <div>
+              <dt>Support</dt>
+              <dd>
+                Need help?{" "}
+                <a
+                  className="inline"
+                  href={`mailto:${CONTACT_EMAIL}?subject=Support`}
+                >
+                  {CONTACT_EMAIL}
+                </a>
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="section reference" id="privacy">
+          <p className="eyebrow">Privacy</p>
+          <h2>We keep only what we need.</h2>
+          <p className="body">
+            VUUSH uses account, job, and location data to complete deliveries and
+            run the platform. We do not sell personal data. Questions:{" "}
+            <a
+              className="inline"
+              href={`mailto:${CONTACT_EMAIL}?subject=Privacy`}
+            >
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+        </section>
+
+        <section className="section reference" id="terms">
+          <p className="eyebrow">Terms</p>
+          <h2>Clear use of VUUSH.</h2>
+          <p className="body">
+            Using Customer, Driver, or Enterprise means you agree to complete
+            work honestly, follow local law, and respect people on every job.
+            Formal contracts for organisations are issued through Enterprise.
+            Questions:{" "}
+            <a
+              className="inline"
+              href={`mailto:${CONTACT_EMAIL}?subject=Terms`}
+            >
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+        </section>
       </main>
 
-      <footer className="footer">
-        <a className="lockup" href="#top">
-          <span className="mark" aria-hidden="true" />
-          <span className="word">VUUSH</span>
-        </a>
-        <p>© {new Date().getFullYear()} VUUSH</p>
+      <footer className="footer" aria-label="Company directory">
+        <div className="footer-grid">
+          <div className="footer-col">
+            <p className="footer-heading">Products</p>
+            <ul>
+              <li>
+                <a href={CUSTOMER_URL}>Customer</a>
+              </li>
+              <li>
+                <a href={DRIVER_URL}>Driver</a>
+              </li>
+              <li>
+                <a href={ENTERPRISE_URL}>Enterprise</a>
+              </li>
+              <li>
+                <span className="footer-muted">API · when ready</span>
+              </li>
+              <li>
+                <span className="footer-muted">AI · future</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="footer-col">
+            <p className="footer-heading">Company</p>
+            <ul>
+              <li>
+                <a href="#about">About</a>
+              </li>
+              <li>
+                <a href="#about">Leadership</a>
+              </li>
+              <li>
+                <a href={`mailto:${CAREERS_EMAIL}?subject=Careers`}>Careers</a>
+              </li>
+              <li>
+                <a href={`mailto:${CONTACT_EMAIL}?subject=Contact`}>Contact</a>
+              </li>
+            </ul>
+          </div>
+
+          <div className="footer-col">
+            <p className="footer-heading">For serious customers</p>
+            <ul>
+              <li>
+                <a href={ENTERPRISE_URL}>Enterprise portal</a>
+              </li>
+              <li>
+                <a href="#trust">Safety &amp; trust</a>
+              </li>
+              <li>
+                <a href="#coverage">Coverage</a>
+              </li>
+              <li>
+                <a href={`mailto:${CONTACT_EMAIL}?subject=Support`}>Support</a>
+              </li>
+            </ul>
+          </div>
+
+          <div className="footer-col">
+            <p className="footer-heading">Trust &amp; legal</p>
+            <ul>
+              <li>
+                <a href="#privacy">Privacy</a>
+              </li>
+              <li>
+                <a href="#terms">Terms of use</a>
+              </li>
+              <li>
+                <a href={DRIVER_URL}>For drivers</a>
+              </li>
+              <li>
+                <a href={ENTERPRISE_URL}>For businesses</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="footer-bar">
+          <a className="lockup" href="#top">
+            <span className="mark" aria-hidden="true" />
+            <span className="word">VUUSH</span>
+          </a>
+          <p>
+            © {year} VUUSH · South Africa · {SITE_DOMAIN}
+          </p>
+        </div>
       </footer>
     </div>
   );

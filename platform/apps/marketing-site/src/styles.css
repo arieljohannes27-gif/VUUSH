@@ -308,23 +308,80 @@ a.product-row:hover {
   color: var(--ink);
 }
 
-/* —— Footer —— */
+/* —— Footer (company directory for serious visitors) —— */
 
 .footer {
+  margin-top: auto;
+  padding: clamp(3rem, 8vw, 4.5rem) var(--pad) 2.5rem;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 92%, #f3f3f3);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2rem clamp(1.5rem, 4vw, 3rem);
+  max-width: var(--wide);
+  margin: 0 auto 2.75rem;
+}
+
+.footer-heading {
+  margin: 0 0 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.footer-col a,
+.footer-muted {
+  display: inline-block;
+  padding: 0.25rem 0.4rem;
+  margin: 0 -0.4rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 300;
+  color: var(--ink);
+  transition: background 0.2s ease;
+}
+
+.footer-col a:hover {
+  background: var(--wash);
+}
+
+.footer-muted {
+  color: var(--mute);
+}
+
+.footer-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: auto;
-  padding: 2rem var(--pad) 2.5rem;
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding-top: 1.5rem;
   border-top: 1px solid var(--line);
 }
 
-.footer p {
+.footer-bar p {
   margin: 0;
   font-size: 0.85rem;
   font-weight: 300;
   color: var(--mute);
+}
+
+.reference .body {
+  max-width: 42ch;
 }
 
 @keyframes enter {
@@ -338,6 +395,12 @@ a.product-row:hover {
   }
 }
 
+@media (max-width: 860px) {
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .product-row,
   .about-list div {
@@ -347,6 +410,16 @@ a.product-row:hover {
 
   .nav nav {
     gap: 0;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
+    gap: 1.75rem;
+  }
+
+  .footer-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
