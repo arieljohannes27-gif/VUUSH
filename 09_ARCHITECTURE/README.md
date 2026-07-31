@@ -49,7 +49,11 @@ Official enterprise architecture programme for SWIFT Technologies. Each phase is
 | — | `33_BEACHHEAD_GO_LIVE.md` | **Go-live click path** (Supabase · Railway · Vercel) |
 | — | `34_DRIVER_CLEARANCE_DESIGN.md` | **Driver clearance** — password at sign-up + Admin approve |
 | — | `35_M7_ENTERPRISE_DESIGN.md` | **M7 Enterprise (B2B)** — APPROVED TO BUILD (2026-07-26) |
-| — | `36_M7_ENTERPRISE_NOTES.md` | **M7 implementation** — E0–E2 delivered |
+| — | `36_M7_ENTERPRISE_NOTES.md` | **M7 implementation** — E0–E6 delivered |
+| — | `38_WAVE2_FINANCE_DESIGN.md` | **Wave-2 Finance & trust** — APPROVED TO BUILD (2026-07-30) |
+| — | `40_WAVE2_FINANCE_NOTES.md` | **Wave-2 Finance implementation** — F0–F9 delivered |
+| — | `41_FINANCE_INCOME_DISPLAY.md` | **Company income on Finance Home** — display lock |
+| — | `39_WAVE_EHAILING_PARKED.md` | **Wave E e-hailing** — PARKED (design after Finance DoD; no coding) |
 | — | `../platform/` | **M0–M8c + M5b maps · VUUSH surface brand** |
 
 ## What comes after baseline

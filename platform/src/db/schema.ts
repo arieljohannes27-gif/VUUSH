@@ -1001,7 +1001,103 @@ export const orgApiKeys = pgTable(
   ],
 );
 
-/** M7 E6 — multi-stop runs (booker order — not optimiser) */
+/** Wave 2 Finance — manual reconcile board */
+export const financeReconcileItems = pgTable(
+  "finance_reconcile_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull(),
+    externalRef: text("external_ref"),
+    jobId: uuid("job_id").references(() => jobs.id),
+    paymentId: uuid("payment_id").references(() => payments.id),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("ZAR"),
+    status: text("status").notNull().default("open"),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("finance_reconcile_status_idx").on(table.status, table.createdAt),
+  ],
+);
+
+/** Wave 2 Finance — memo credit notes (not auto-refund) */
+export const creditNotes = pgTable(
+  "credit_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id").references(() => organisations.id),
+    jobId: uuid("job_id").references(() => jobs.id),
+    statementId: uuid("statement_id").references(() => orgInvoices.id),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("ZAR"),
+    reasonCode: text("reason_code").notNull(),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("credit_notes_org_idx").on(table.orgId, table.createdAt)],
+);
+
+/** Wave 2 Finance — large Support refunds awaiting Finance */
+export const adjustmentRequests = pgTable(
+  "adjustment_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id),
+    caseId: uuid("case_id"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("ZAR"),
+    reasonCode: text("reason_code").notNull(),
+    status: text("status").notNull().default("pending_finance"),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
+    resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id),
+    resolutionNote: text("resolution_note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("adjustment_requests_status_idx").on(table.status, table.createdAt),
+  ],
+);
+
+/** Wave 2 Finance — diligence / audit packs (JSON payload beachhead) */
+export const auditPacks = pgTable(
+  "audit_packs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
+    orgId: uuid("org_id").references(() => organisations.id),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("ready"),
+    manifestJson: jsonb("manifest_json")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    payloadJson: jsonb("payload_json")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("audit_packs_created_idx").on(table.createdAt)],
+);
+
+/** M7 E6/M7b — multi-stop runs (booker or suburb-sorted order) */
 export const jobStops = pgTable(
   "job_stops",
   {
@@ -1010,6 +1106,10 @@ export const jobStops = pgTable(
       .notNull()
       .references(() => jobs.id),
     sequence: integer("sequence").notNull(),
+    /** Original booker line order (1-based), before suburb sort */
+    bookerSequence: integer("booker_sequence"),
+    /** booker | suburb */
+    orderingMode: text("ordering_mode").notNull().default("booker"),
     label: text("label"),
     address: text("address").notNull(),
     zoneCode: text("zone_code"),

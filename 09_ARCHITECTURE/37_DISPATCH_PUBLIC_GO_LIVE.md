@@ -14,6 +14,7 @@ Set these in Railway variables:
 - OTP_EMAIL_PROVIDER=resend
 - RESEND_API_KEY=re_...
 - OTP_EMAIL_FROM=VUUSH <noreply@your-verified-domain>
+  (or `VUUSH <onboarding@resend.dev>` until your domain is verified)
 - LOG_LEVEL=info
 
 Health check path should be `/ready` (already in railway.toml).

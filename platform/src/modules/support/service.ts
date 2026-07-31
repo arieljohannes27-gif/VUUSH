@@ -10,7 +10,7 @@ import {
 } from "../../db/schema.js";
 import { writeAuditEvent } from "../audit/service.js";
 import { placeHold } from "../dispatch/service.js";
-import { listPaymentsForJob, refundPayment } from "../payments/service.js";
+import { listPaymentsForJob } from "../payments/service.js";
 
 function publicCode() {
   return `SU-${randomBytes(3).toString("hex").toUpperCase()}`;
@@ -378,30 +378,44 @@ export async function refundForCase(input: {
   const row = await requireCase(input.caseId);
   if (!row.jobId) throw new Error("case_has_no_job");
 
-  const result = await refundPayment({
+  const { requestOrExecuteRefund } = await import("../finance/service.js");
+  const { getUserRoles } = await import("../identity/service.js");
+  const actorRoles = await getUserRoles(input.actorUserId);
+
+  const result = await requestOrExecuteRefund({
     jobId: row.jobId,
     amountCents: input.amountCents,
     reasonCode: input.reasonCode,
     actorUserId: input.actorUserId,
+    actorRoles,
+    caseId: row.id,
     correlationId: input.correlationId,
   });
+
+  const body =
+    result.status === "needs_finance_approval"
+      ? `Refund sent to Finance for approval (${input.reasonCode})`
+      : `Refund issued (${input.reasonCode})`;
 
   await db.insert(supportMessages).values({
     caseId: row.id,
     authorUserId: input.actorUserId,
     authorKind: "system",
-    body: `Refund issued (${input.reasonCode})`,
+    body,
   });
 
   await writeAuditEvent({
     actorType: "user",
     actorId: input.actorUserId,
-    action: "SUPPORT_REFUND_ISSUED",
+    action:
+      result.status === "needs_finance_approval"
+        ? "SUPPORT_REFUND_PENDING_FINANCE"
+        : "SUPPORT_REFUND_ISSUED",
     subjectType: "support_case",
     subjectId: row.id,
     reasonCode: input.reasonCode,
     correlationId: input.correlationId,
-    payload: { jobId: row.jobId },
+    payload: { jobId: row.jobId, result },
   });
 
   return result;

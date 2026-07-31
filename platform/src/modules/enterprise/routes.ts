@@ -28,6 +28,7 @@ import {
   listPendingApprovalJobs,
   revokeOrgApiKey,
   signupEnterprise,
+  suburbSortStops,
   updateOrganisation,
   updateOrgSite,
 } from "./service.js";
@@ -819,6 +820,7 @@ export async function enterpriseRoutes(app: FastifyInstance) {
         .object({
           serviceTypeCode: z.string().min(2),
           packageClass: z.enum(["small", "medium", "large"]).default("small"),
+          orderingMode: z.enum(["booker", "suburb"]).default("suburb"),
           stops: z
             .array(
               z.object({
@@ -837,8 +839,15 @@ export async function enterpriseRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "validation_error" });
       }
       const stops = parsed.data.stops;
-      const first = stops[0];
-      const last = stops[stops.length - 1];
+      const orderingMode = parsed.data.orderingMode;
+      const driveOrder =
+        orderingMode === "suburb" ? suburbSortStops(stops) : stops;
+      const first = driveOrder[0];
+      const last = driveOrder[driveOrder.length - 1];
+      const orderNote =
+        orderingMode === "suburb"
+          ? `Multi-stop (${stops.length} stops — suburb-sorted order, not a full route optimiser)`
+          : `Multi-stop (${stops.length} stops — your stop order)`;
       try {
         const job = await createDraftJob({
           shipperUserId: request.authUser!.id,
@@ -850,14 +859,25 @@ export async function enterpriseRoutes(app: FastifyInstance) {
           dropoffAddress: last.address,
           dropoffZoneCode: last.zoneCode ?? first.zoneCode ?? "CPT-CBD",
           notes:
-            (parsed.data.notes ? `${parsed.data.notes} · ` : "") +
-            `Multi-stop (${stops.length} stops — your stop order)`,
+            (parsed.data.notes ? `${parsed.data.notes} · ` : "") + orderNote,
           prohibitedGoodsDeclared: true,
           containsProhibitedGoods: false,
           correlationId: request.id,
         });
-        const stopRows = await attachJobStops({ jobId: job.id, stops });
-        return reply.status(201).send({ job, stops: stopRows });
+        const stopRows = await attachJobStops({
+          jobId: job.id,
+          stops,
+          orderingMode,
+        });
+        return reply.status(201).send({
+          job,
+          stops: stopRows,
+          orderingMode,
+          orderingNote:
+            orderingMode === "suburb"
+              ? "Suburb-sorted order — not a full route optimiser"
+              : "Your stop order",
+        });
       } catch (err) {
         const mapped = mapError(err);
         return reply.status(mapped.status).send({ error: mapped.error });

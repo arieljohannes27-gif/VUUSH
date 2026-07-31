@@ -2,7 +2,7 @@
 
 **VUUSH — Master Company Handbook**
 
-**Status:** Brand + Foundation meaning locked (2026-07-24) · Architecture Phases 1–10 APPROVED · Wave-1 platform in `platform/` · Technical rename from legacy working names on hold until authorised
+**Status:** Brand + Foundation meaning locked · Public brand **VUUSH** (KYRO rename cancelled) · Architecture Phases 1–10 APPROVED · Wave-1 platform in `platform/` · Technical rename from legacy working names on hold until authorised
 
 ## Purpose
 

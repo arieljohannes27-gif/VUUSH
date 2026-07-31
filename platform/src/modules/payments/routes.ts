@@ -13,8 +13,8 @@ import {
   listPaymentsForJob,
   listPayoutBatches,
   processWebhook,
-  refundPayment,
 } from "./service.js";
+import { requestOrExecuteRefund } from "../finance/service.js";
 import { env } from "../../config.js";
 
 const financeRoles = ["administrator", "finance_officer"] as const;
@@ -119,14 +119,17 @@ export async function paymentRoutes(app: FastifyInstance) {
         });
       }
       try {
-        const result = await refundPayment({
+        const result = await requestOrExecuteRefund({
           jobId,
           amountCents: parsed.data.amountCents,
           reasonCode: parsed.data.reasonCode,
           actorUserId: request.authUser!.id,
+          actorRoles: request.authUser!.roles,
           correlationId: request.id,
         });
-        return reply.status(201).send(result);
+        const status =
+          result.status === "needs_finance_approval" ? 202 : 201;
+        return reply.status(status).send(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : "refund_error";
         return reply.status(400).send({ error: message });

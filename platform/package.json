@@ -31,6 +31,7 @@
     "smoke:m8b": "bash scripts/smoke-m8b.sh",
     "smoke:m8c": "bash scripts/smoke-m8c.sh",
     "smoke:rc": "bash scripts/smoke-rc.sh",
+    "smoke:finance": "bash scripts/smoke-finance.sh",
     "console:dispatch": "npm run dev --prefix apps/dispatch-console",
     "console:driver": "npm run dev --prefix apps/driver-app",
     "console:customer": "npm run dev --prefix apps/customer-app",

@@ -954,6 +954,7 @@ export async function getJobMoney(jobIdOrCode: string) {
       publicCode: job.publicCode,
       state: job.state,
       paymentStatus: job.paymentStatus,
+      orgId: job.orgId ?? null,
     },
     payments: paymentRows,
     earnings,

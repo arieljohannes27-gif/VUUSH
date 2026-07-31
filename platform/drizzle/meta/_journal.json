@@ -127,6 +127,20 @@
       "when": 1754348400000,
       "tag": "0017_m7_e3_e6",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1754434800000,
+      "tag": "0018_m7b_suburb_sort",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1754521200000,
+      "tag": "0019_wave2_finance",
+      "breakpoints": true
     }
   ]
 }

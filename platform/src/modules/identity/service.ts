@@ -18,23 +18,12 @@ import {
 } from "./crypto.js";
 import { isRole, requiresStaffMfa, type Role } from "./roles.js";
 import { deliverOtp } from "./otp-delivery.js";
+import { emailLookupCandidates } from "./email-aliases.js";
 
 function normalizeDestination(channel: "phone" | "email", destination: string) {
   const trimmed = destination.trim();
   if (channel === "email") return trimmed.toLowerCase();
   return trimmed.replace(/\s+/g, "");
-}
-
-/** Beachhead: @vuush.local and legacy @swift.local resolve to the same mailbox. */
-function emailLookupCandidates(email: string): string[] {
-  const e = email.trim().toLowerCase();
-  const out = [e];
-  if (e.endsWith("@vuush.local")) {
-    out.push(e.replace(/@vuush\.local$/, "@swift.local"));
-  } else if (e.endsWith("@swift.local")) {
-    out.push(e.replace(/@swift\.local$/, "@vuush.local"));
-  }
-  return [...new Set(out)];
 }
 
 export async function requestOtp(input: {

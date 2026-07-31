@@ -16,6 +16,7 @@ import {
 } from "../../db/schema.js";
 import { writeAuditEvent } from "../audit/service.js";
 import { hashPassword } from "../identity/crypto.js";
+import { emailLookupCandidates } from "../identity/email-aliases.js";
 import { assignRole, createSessionForUser, getUserRoles } from "../identity/service.js";
 
 const ORG_ROLES = ["org_admin", "booker", "approver", "viewer"] as const;
@@ -23,17 +24,6 @@ export type OrgRole = (typeof ORG_ROLES)[number];
 
 function isOrgRole(value: string): value is OrgRole {
   return (ORG_ROLES as readonly string[]).includes(value);
-}
-
-function emailLookupCandidates(email: string): string[] {
-  const e = email.trim().toLowerCase();
-  const out = [e];
-  if (e.endsWith("@vuush.local")) {
-    out.push(e.replace(/@vuush\.local$/, "@swift.local"));
-  } else if (e.endsWith("@swift.local")) {
-    out.push(e.replace(/@swift\.local$/, "@vuush.local"));
-  }
-  return [...new Set(out)];
 }
 
 async function findOrCreateUserByEmail(email: string, displayName?: string) {
@@ -855,7 +845,7 @@ export async function listJobStops(jobId: string) {
     .where(eq(jobStops.jobId, jobId))
     .orderBy(jobStops.sequence);
 
-  // Enrich missing coords from zone centroids (map view — booker order only)
+  // Enrich missing coords from zone centroids (map view)
   return rows.map((row) => {
     if (row.lat != null && row.lng != null) return row;
     const coords = coordsForStop(row.zoneCode, row.sequence);
@@ -871,6 +861,15 @@ const ZONE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
   "CPT-NOR": { lat: -33.855, lng: 18.64 },
 };
 
+/** Beachhead suburb ring — not a full route optimiser (M7b lite). */
+const ZONE_RING = ["CPT-CBD", "CPT-ATL", "CPT-SOU", "CPT-NOR"] as const;
+
+function zoneRingIndex(zoneCode: string | null | undefined) {
+  const code = (zoneCode ?? "").trim().toUpperCase();
+  const idx = ZONE_RING.indexOf(code as (typeof ZONE_RING)[number]);
+  return idx === -1 ? ZONE_RING.length : idx;
+}
+
 function coordsForStop(zoneCode: string | null | undefined, sequence: number) {
   const base =
     ZONE_CENTROIDS[zoneCode?.trim() || ""] ?? ZONE_CENTROIDS["CPT-CBD"];
@@ -882,14 +881,52 @@ function coordsForStop(zoneCode: string | null | undefined, sequence: number) {
   };
 }
 
+export type StopInput = {
+  label?: string;
+  address: string;
+  zoneCode?: string;
+};
+
+/**
+ * Suburb sort: keep stop 1 fixed (warehouse/start), group the rest by zone ring,
+ * preserve booker relative order inside each zone. Not a TSP / traffic optimiser.
+ */
+export function suburbSortStops(stops: StopInput[]): Array<
+  StopInput & { bookerSequence: number }
+> {
+  if (stops.length < 2) {
+    return stops.map((s, i) => ({ ...s, bookerSequence: i + 1 }));
+  }
+  const tagged = stops.map((s, i) => ({
+    ...s,
+    bookerSequence: i + 1,
+  }));
+  const [first, ...rest] = tagged;
+  rest.sort((a, b) => {
+    const za = zoneRingIndex(a.zoneCode);
+    const zb = zoneRingIndex(b.zoneCode);
+    if (za !== zb) return za - zb;
+    return a.bookerSequence - b.bookerSequence;
+  });
+  return [first, ...rest];
+}
+
 export async function attachJobStops(input: {
   jobId: string;
-  stops: Array<{ label?: string; address: string; zoneCode?: string }>;
+  stops: StopInput[];
+  /** booker = typed order · suburb = zone-ring sort (M7b lite) */
+  orderingMode?: "booker" | "suburb";
 }) {
   if (input.stops.length < 2) throw new Error("stops_min_two");
+  const orderingMode = input.orderingMode ?? "suburb";
+  const ordered =
+    orderingMode === "suburb"
+      ? suburbSortStops(input.stops)
+      : input.stops.map((s, i) => ({ ...s, bookerSequence: i + 1 }));
+
   const rows = [];
-  for (let i = 0; i < input.stops.length; i++) {
-    const s = input.stops[i];
+  for (let i = 0; i < ordered.length; i++) {
+    const s = ordered[i];
     const sequence = i + 1;
     const zoneCode = s.zoneCode?.trim() || null;
     const coords = coordsForStop(zoneCode, sequence);
@@ -898,6 +935,8 @@ export async function attachJobStops(input: {
       .values({
         jobId: input.jobId,
         sequence,
+        bookerSequence: s.bookerSequence,
+        orderingMode,
         label: s.label?.trim() || `Stop ${sequence}`,
         address: s.address.trim(),
         zoneCode,

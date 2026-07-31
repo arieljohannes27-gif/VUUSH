@@ -589,6 +589,7 @@ export async function fetchJobMoney(token: string, jobIdOrCode: string) {
       publicCode: string;
       state: string;
       paymentStatus: string;
+      orgId?: string | null;
     };
     payments: Array<{
       id: string;
@@ -611,4 +612,221 @@ export async function fetchJobMoney(token: string, jobIdOrCode: string) {
       createdAt: string;
     }>;
   }>(`/v1/finance/jobs/${encodeURIComponent(jobIdOrCode)}/money`, { token });
+}
+
+export async function fetchFinanceHome(token: string) {
+  return api<{
+    companyIncome: {
+      label: string;
+      definition: string;
+      amountCents: number;
+      currency: string;
+      periodLabel: string;
+      isDemo: boolean;
+      supports: Array<{
+        key: string;
+        label: string;
+        hint: string;
+        amountCents: number;
+      }>;
+    };
+    needsYou: {
+      failedPayments: number;
+      frozenEarnings: number;
+      frozenEarningsCents: number;
+      payoutBatchesAttention: number;
+      staleReconcile: number;
+      pendingAdjustments: number;
+    };
+    thresholdCents: number;
+  }>("/v1/finance/home", { token });
+}
+
+export async function fetchFinancePayments(
+  token: string,
+  filters?: { status?: string },
+) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  const qs = params.toString() ? `?${params}` : "";
+  return api<{
+    payments: Array<{
+      id: string;
+      jobId: string;
+      jobPublicCode: string;
+      amountCents: number;
+      currency: string;
+      status: string;
+      provider: string;
+      providerPaymentId: string | null;
+      failureCode: string | null;
+      createdAt: string;
+    }>;
+  }>(`/v1/finance/payments${qs}`, { token });
+}
+
+export async function fetchFinanceStatements(token: string) {
+  return api<{
+    statements: Array<{
+      id: string;
+      orgId: string;
+      orgName: string;
+      periodStart: string;
+      periodEnd: string;
+      currency: string;
+      totalCents: number;
+      status: string;
+      createdAt: string;
+    }>;
+  }>("/v1/finance/statements", { token });
+}
+
+export async function generateFinanceStatement(token: string, orgId: string) {
+  return api<{ invoice: { id: string; totalCents: number } }>(
+    "/v1/finance/statements/generate",
+    { token, body: { orgId } },
+  );
+}
+
+export async function createCreditNote(
+  token: string,
+  body: {
+    amountCents: number;
+    reasonCode: string;
+    orgId?: string;
+    jobId?: string;
+    statementId?: string;
+    notes?: string;
+  },
+) {
+  return api<{ creditNote: { id: string } }>("/v1/finance/credit-notes", {
+    token,
+    body,
+  });
+}
+
+export async function fetchAdjustments(token: string) {
+  return api<{
+    adjustments: Array<{
+      id: string;
+      jobId: string;
+      jobPublicCode: string;
+      amountCents: number;
+      reasonCode: string;
+      status: string;
+      requesterEmail?: string | null;
+      createdAt: string;
+    }>;
+  }>("/v1/finance/adjustments", { token });
+}
+
+export async function approveAdjustment(token: string, id: string) {
+  return api(`/v1/finance/adjustments/${id}/approve`, {
+    token,
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function rejectAdjustment(token: string, id: string, note?: string) {
+  return api(`/v1/finance/adjustments/${id}/reject`, {
+    token,
+    body: { note },
+  });
+}
+
+export async function fetchReconcileItems(token: string, status = "open") {
+  return api<{
+    items: Array<{
+      id: string;
+      source: string;
+      externalRef: string | null;
+      jobId: string | null;
+      amountCents: number;
+      status: string;
+      notes: string | null;
+      createdAt: string;
+    }>;
+  }>(`/v1/finance/reconcile?status=${encodeURIComponent(status)}`, { token });
+}
+
+export async function createReconcileItem(
+  token: string,
+  body: { source: string; amountCents: number; externalRef?: string; notes?: string },
+) {
+  return api<{ item: { id: string } }>("/v1/finance/reconcile", {
+    token,
+    body,
+  });
+}
+
+export async function matchReconcileItem(
+  token: string,
+  id: string,
+  jobId: string,
+) {
+  return api(`/v1/finance/reconcile/${id}/match`, {
+    token,
+    body: { jobId },
+  });
+}
+
+export async function waiveReconcileItem(token: string, id: string, notes?: string) {
+  return api(`/v1/finance/reconcile/${id}/waive`, {
+    token,
+    body: { notes },
+  });
+}
+
+export async function downloadFinanceExport(
+  token: string,
+  body: { from: string; to: string; datasets: string[] },
+) {
+  const res = await fetch(apiUrl("/v1/finance/exports"), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `export_${res.status}`);
+  }
+  return res.blob();
+}
+
+export async function fetchAuditPacks(token: string) {
+  return api<{
+    packs: Array<{
+      id: string;
+      periodStart: string;
+      periodEnd: string;
+      status: string;
+      createdAt: string;
+      manifestJson: Record<string, unknown>;
+    }>;
+  }>("/v1/admin/audit-packs", { token });
+}
+
+export async function createAuditPack(
+  token: string,
+  body: { from: string; to: string; orgId?: string },
+) {
+  return api<{ pack: { id: string } }>("/v1/admin/audit-packs", {
+    token,
+    body,
+  });
+}
+
+export async function downloadAuditPack(token: string, id: string) {
+  const res = await fetch(apiUrl(`/v1/admin/audit-packs/${id}/download`), {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `pack_${res.status}`);
+  }
+  return res.blob();
 }

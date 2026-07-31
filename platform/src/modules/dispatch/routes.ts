@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAuth, requireRoles } from "../../plugins/auth.js";
 import { isDev } from "../../config.js";
+import { listJobStops } from "../enterprise/service.js";
 import {
   acceptAssignment,
   assignJob,
@@ -46,7 +47,24 @@ export async function dispatchRoutes(app: FastifyInstance) {
     "/v1/drivers/me",
     { preHandler: requireAuth },
     async (request) => {
-      return getDriverHome(request.authUser!.id);
+      const home = await getDriverHome(request.authUser!.id);
+      if (!home.job) return home;
+      const stops = await listJobStops(home.job.id);
+      return {
+        ...home,
+        stops: stops.length >= 2 ? stops : [],
+      };
+    },
+  );
+
+  app.get(
+    "/v1/drivers/me/jobs/:jobId/stops",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      const history = await getDriverJobHistory(request.authUser!.id, jobId);
+      if (!history) return reply.status(404).send({ error: "job_not_found" });
+      return { stops: await listJobStops(jobId) };
     },
   );
 

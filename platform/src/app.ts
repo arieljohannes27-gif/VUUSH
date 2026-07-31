@@ -12,6 +12,8 @@ import { executionRoutes } from "./modules/execution/routes.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { identityRoutes } from "./modules/identity/routes.js";
 import { incidentRoutes } from "./modules/incidents/routes.js";
+import { financeRoutes } from "./modules/finance/routes.js";
+import { seedFinanceDefaults } from "./modules/finance/service.js";
 import { paymentRoutes } from "./modules/payments/routes.js";
 import { supportRoutes } from "./modules/support/routes.js";
 import { trackingRoutes } from "./modules/tracking/routes.js";
@@ -44,6 +46,7 @@ export async function buildApp() {
   await app.register(identityRoutes);
   await app.register(bookingRoutes);
   await app.register(paymentRoutes);
+  await app.register(financeRoutes);
   await app.register(dispatchRoutes);
   await app.register(incidentRoutes);
   await app.register(trackingRoutes);
@@ -69,5 +72,7 @@ export async function ensureCatalogSeed(log?: {
   log?.info(result, "booking catalog seed");
   const admin = await seedAdminDefaults();
   log?.info(admin, "admin defaults seed");
+  const finance = await seedFinanceDefaults();
+  log?.info(finance, "finance defaults seed");
   return result;
 }

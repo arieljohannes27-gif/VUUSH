@@ -5,6 +5,8 @@ const CUSTOMER_URL =
 const ENTERPRISE_URL =
   import.meta.env.VITE_ENTERPRISE_URL ??
   "https://vuush-enterprise.vercel.app";
+const CAREERS_EMAIL =
+  import.meta.env.VITE_CAREERS_EMAIL ?? "hello@vuush.app";
 
 export default function App() {
   return (
@@ -123,8 +125,11 @@ export default function App() {
             <div>
               <dt>Careers</dt>
               <dd>
-                <a className="inline" href="mailto:hello@vuush.app?subject=Careers">
-                  hello@vuush.app
+                <a
+                  className="inline"
+                  href={`mailto:${CAREERS_EMAIL}?subject=Careers`}
+                >
+                  {CAREERS_EMAIL}
                 </a>
               </dd>
             </div>

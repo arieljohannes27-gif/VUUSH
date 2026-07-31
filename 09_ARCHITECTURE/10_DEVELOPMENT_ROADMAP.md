@@ -292,7 +292,15 @@ M0 Platform
 
 14. Harden **M8** settlements/payouts/invoices  
 15. **M7** Enterprise Portal (+ PR24 APIs)  
-16. Audit packs (**PR25** assembly) in Admin  
+16. Audit packs (**PR25** assembly) in Admin · Finance Dashboard depth (`38_WAVE2_FINANCE_DESIGN.md`)  
+
+**Gate:** Wave 2 Finance fully complete before any e-hailing design deep-dive.
+
+### Phase C+ — E-hailing (parked · design after Finance)
+
+- **Wave E** people mobility — parked brief `39_WAVE_EHAILING_PARKED.md`  
+- **No coding** until Wave E design is written and **APPROVED TO BUILD**  
+- Do not bend the parcel job spine while Finance is open  
 
 ### Phase D — Supply & ops maturity (W3)
 

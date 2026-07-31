@@ -490,10 +490,11 @@ Aligned with Phase 1 (SMB beachhead, controlled platform):
 | **Wave 1** | Customer App · Driver App · Dispatcher Console · Admin (min) · Support (min) | Prove promise in one metro |
 | **Wave 2** | Finance Dashboard · Enterprise Portal (pilot-grade) | Money + B2B |
 | **Wave 3** | Fleet Dashboard · Operations Dashboard | Supply partners + ops maturity |
+| **Wave E** | E-hailing (people mobility) — **parked** | Design only **after** Wave 2 Finance complete; see `39_WAVE_EHAILING_PARKED.md` |
 | **Wave 4** | AI Operations Centre · Business Intelligence | Intelligence after data exists |
 | **Wave 5** | Harden all for multi-city | Expansion readiness |
 
-Module-level engineering roadmap → **Phase 10**. This is product capability sequencing only.
+**Wave E** does not change the parcel job spine until a separate design is approved. Module-level engineering roadmap → **Phase 10**. This is product capability sequencing only.
 
 ---
 

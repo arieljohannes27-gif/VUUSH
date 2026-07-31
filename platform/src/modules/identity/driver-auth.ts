@@ -8,23 +8,13 @@ import {
   assertPdfOrImageDataUrl,
   assertPhotoDataUrl,
 } from "./doc-validate.js";
+import { emailLookupCandidates } from "./email-aliases.js";
 import {
   createSessionForUser,
   getUserRoles,
   requestOtp,
   verifyOtp,
 } from "./service.js";
-
-function emailLookupCandidates(email: string): string[] {
-  const e = email.trim().toLowerCase();
-  const out = [e];
-  if (e.endsWith("@vuush.local")) {
-    out.push(e.replace(/@vuush\.local$/, "@swift.local"));
-  } else if (e.endsWith("@swift.local")) {
-    out.push(e.replace(/@swift\.local$/, "@vuush.local"));
-  }
-  return [...new Set(out)];
-}
 
 export async function signupDriver(input: {
   email: string;

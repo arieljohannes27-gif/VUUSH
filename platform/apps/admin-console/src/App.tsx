@@ -2,14 +2,25 @@ import { useEffect, useState } from "react";
 import {
   assignDevRole,
   closeBreakGlass,
+  approveAdjustment,
   assignDriverToEarning,
+  createAuditPack,
+  createCreditNote,
   createPayoutBatch,
+  createReconcileItem,
   createZone,
+  downloadAuditPack,
+  downloadFinanceExport,
   executePayoutBatch,
+  fetchAdjustments,
   fetchAdminHome,
   fetchAudit,
+  fetchAuditPacks,
   fetchBreakGlass,
   fetchFinanceEarnings,
+  fetchFinanceHome,
+  fetchFinancePayments,
+  fetchFinanceStatements,
   fetchFlags,
   fetchJobMoney,
   fetchMe,
@@ -18,6 +29,7 @@ import {
   fetchPricing,
   fetchProhibited,
   fetchReasonCodes,
+  fetchReconcileItems,
   fetchServiceTypes,
   createOrganisation,
   fetchDriverApplications,
@@ -26,9 +38,12 @@ import {
   fetchStaff,
   fetchZones,
   freezeJobEarnings,
+  generateFinanceStatement,
   grantRole,
   inviteOrgMember,
+  matchReconcileItem,
   resetOrgMemberPassword,
+  rejectAdjustment,
   reviewDriverApplication,
   updateOrganisation,
   openBreakGlass,
@@ -43,6 +58,7 @@ import {
   revokeRole,
   verifyMfa,
   verifyOtp,
+  waiveReconcileItem,
   type AdminOrganisation,
   type FinanceEarning,
   type PayoutBatch,
@@ -57,6 +73,7 @@ import {
 } from "./totp";
 
 const TOKEN_KEY = "vuush.admin.token";
+const TOKEN_KEY_LEGACY = "swift.admin.token";
 
 function DocLink({ label, url }: { label: string; url: string | null }) {
   if (!url) return <div className="muted">{label}: —</div>;
@@ -69,7 +86,6 @@ function DocLink({ label, url }: { label: string; url: string | null }) {
     </div>
   );
 }
-const TOKEN_KEY_LEGACY = "swift.admin.token";
 
 function readStoredToken() {
   return localStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY_LEGACY);
@@ -103,9 +119,16 @@ type Nav =
   | "flags"
   | "pricing"
   | "goods"
+  | "finance-home"
+  | "payments"
   | "earnings"
   | "batches"
   | "job-money"
+  | "adjustments"
+  | "statements"
+  | "reconcile"
+  | "exports"
+  | "audit-packs"
   | "audit"
   | "breakglass";
 
@@ -343,6 +366,44 @@ function Console({
   const [jobMoney, setJobMoney] = useState<Awaited<
     ReturnType<typeof fetchJobMoney>
   > | null>(null);
+  const [financeHome, setFinanceHome] = useState<Awaited<
+    ReturnType<typeof fetchFinanceHome>
+  > | null>(null);
+  const [financePayments, setFinancePayments] = useState<
+    Awaited<ReturnType<typeof fetchFinancePayments>>["payments"]
+  >([]);
+  const [payStatusFilter, setPayStatusFilter] = useState("");
+  const [adjustments, setAdjustments] = useState<
+    Awaited<ReturnType<typeof fetchAdjustments>>["adjustments"]
+  >([]);
+  const [statements, setStatements] = useState<
+    Awaited<ReturnType<typeof fetchFinanceStatements>>["statements"]
+  >([]);
+  const [statementOrgId, setStatementOrgId] = useState("");
+  const [creditForm, setCreditForm] = useState({
+    amountRands: "",
+    reasonCode: "goodwill",
+    orgId: "",
+    jobId: "",
+  });
+  const [reconcileItems, setReconcileItems] = useState<
+    Awaited<ReturnType<typeof fetchReconcileItems>>["items"]
+  >([]);
+  const [reconcileForm, setReconcileForm] = useState({
+    source: "manual",
+    amountRands: "",
+    externalRef: "",
+  });
+  const [matchJobId, setMatchJobId] = useState<Record<string, string>>({});
+  const [exportFrom, setExportFrom] = useState(() =>
+    new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10),
+  );
+  const [exportTo, setExportTo] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [auditPacks, setAuditPacks] = useState<
+    Awaited<ReturnType<typeof fetchAuditPacks>>["packs"]
+  >([]);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -382,6 +443,29 @@ function Console({
       setDriverSharePct(String(Math.round(share * 100)));
     }
     if (nav === "goods") setGoods((await fetchProhibited(token)).items);
+    if (nav === "finance-home") setFinanceHome(await fetchFinanceHome(token));
+    if (nav === "payments") {
+      setFinancePayments(
+        (
+          await fetchFinancePayments(token, {
+            status: payStatusFilter || undefined,
+          })
+        ).payments,
+      );
+    }
+    if (nav === "adjustments") {
+      setAdjustments((await fetchAdjustments(token)).adjustments);
+    }
+    if (nav === "statements") {
+      setStatements((await fetchFinanceStatements(token)).statements);
+      setOrgs((await fetchOrganisations(token)).organisations);
+    }
+    if (nav === "reconcile") {
+      setReconcileItems((await fetchReconcileItems(token, "open")).items);
+    }
+    if (nav === "audit-packs") {
+      setAuditPacks((await fetchAuditPacks(token)).packs);
+    }
     if (nav === "earnings") {
       setEarnings(
         (
@@ -431,7 +515,7 @@ function Console({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav, token]);
 
-  type PlaceId = "home" | "city" | "money" | "people" | "activity";
+  type PlaceId = "home" | "city" | "finance" | "people" | "activity";
 
   const places: Array<{
     id: PlaceId;
@@ -452,12 +536,18 @@ function Console({
       ],
     },
     {
-      id: "money",
-      label: "Money",
+      id: "finance",
+      label: "Finance",
       items: [
-        { id: "job-money", label: "Job money" },
+        { id: "finance-home", label: "Home" },
+        { id: "payments", label: "Payments" },
+        { id: "job-money", label: "Job ledger" },
         { id: "earnings", label: "Earnings" },
         { id: "batches", label: "Payouts" },
+        { id: "adjustments", label: "Adjustments" },
+        { id: "statements", label: "Statements" },
+        { id: "reconcile", label: "Reconcile" },
+        { id: "exports", label: "Exports" },
       ],
     },
     {
@@ -474,6 +564,7 @@ function Console({
       label: "Activity",
       items: [
         { id: "audit", label: "Audit" },
+        { id: "audit-packs", label: "Audit packs" },
         { id: "breakglass", label: "Emergency access" },
       ],
     },
@@ -1484,6 +1575,622 @@ function Console({
             </div>
           ) : null}
 
+          {nav === "finance-home" ? (
+            <div className="stack finance-home">
+              <header className="finance-home-head">
+                <h1>Finance</h1>
+                <p className="muted">
+                  See what the company keeps. Then clear what needs you.
+                </p>
+              </header>
+              {financeHome ? (
+                <>
+                  <section
+                    className="income-board"
+                    aria-label={financeHome.companyIncome.label}
+                  >
+                    <div className="income-board-main">
+                      <div className="income-meta">
+                        <p className="income-label">
+                          {financeHome.companyIncome.label}
+                        </p>
+                        <p className="income-period">
+                          {financeHome.companyIncome.periodLabel}
+                          {financeHome.companyIncome.isDemo ? (
+                            <span className="income-demo"> · Demo</span>
+                          ) : null}
+                        </p>
+                      </div>
+                      <p className="income-amount">
+                        {formatZar(financeHome.companyIncome.amountCents)}
+                      </p>
+                      <p className="income-definition">
+                        {financeHome.companyIncome.definition}
+                      </p>
+                    </div>
+                    <ul className="income-supports">
+                      {financeHome.companyIncome.supports.map((row) => (
+                        <li key={row.key}>
+                          <span className="income-support-label">
+                            {row.label}
+                            <span className="income-support-hint">{row.hint}</span>
+                          </span>
+                          <span className="income-support-value">
+                            {formatZar(row.amountCents)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section className="needs-board" aria-label="Needs you">
+                    <div className="needs-board-head">
+                      <h2>Needs you</h2>
+                      <p className="muted">
+                        Refunds above {formatZar(financeHome.thresholdCents)} wait
+                        for Finance approve.
+                      </p>
+                    </div>
+                    <ul className="needs-list">
+                      {(
+                        [
+                          [
+                            "Failed payments",
+                            "Last 7 days",
+                            String(financeHome.needsYou.failedPayments),
+                            "payments" as Nav,
+                          ],
+                          [
+                            "Frozen earnings",
+                            formatZar(financeHome.needsYou.frozenEarningsCents),
+                            String(financeHome.needsYou.frozenEarnings),
+                            "earnings" as Nav,
+                          ],
+                          [
+                            "Payouts",
+                            "Failed or partial",
+                            String(financeHome.needsYou.payoutBatchesAttention),
+                            "batches" as Nav,
+                          ],
+                          [
+                            "Reconcile",
+                            "Open over 48 hours",
+                            String(financeHome.needsYou.staleReconcile),
+                            "reconcile" as Nav,
+                          ],
+                          [
+                            "Adjustments",
+                            "Waiting approve",
+                            String(financeHome.needsYou.pendingAdjustments),
+                            "adjustments" as Nav,
+                          ],
+                        ] as const
+                      ).map(([label, hint, value, target]) => (
+                        <li key={label}>
+                          <button
+                            type="button"
+                            className="needs-row"
+                            onClick={() => setNav(target)}
+                          >
+                            <span className="needs-copy">
+                              <span className="needs-label">{label}</span>
+                              <span className="needs-hint">{hint}</span>
+                            </span>
+                            <span className="needs-value">{value}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {Object.values(financeHome.needsYou).every((n) => n === 0) ? (
+                      <p className="muted needs-quiet">
+                        Finance is quiet. Nothing needs you.
+                      </p>
+                    ) : null}
+                  </section>
+                </>
+              ) : (
+                <p className="muted">Loading…</p>
+              )}
+            </div>
+          ) : null}
+
+          {nav === "payments" ? (
+            <div className="stack">
+              <h1>Payments</h1>
+              <p className="muted">PSP status for consumer charges.</p>
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(refresh);
+                }}
+              >
+                <select
+                  value={payStatusFilter}
+                  onChange={(e) => setPayStatusFilter(e.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  <option value="failed">failed</option>
+                  <option value="declined">declined</option>
+                  <option value="pending">pending</option>
+                  <option value="captured">captured</option>
+                  <option value="refunded">refunded</option>
+                </select>
+                <button type="submit" disabled={busy}>
+                  Refresh
+                </button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Job</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Provider</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {financePayments.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => {
+                            setJobMoneyQ(p.jobPublicCode);
+                            setNav("job-money");
+                          }}
+                        >
+                          {p.jobPublicCode}
+                        </button>
+                      </td>
+                      <td>{formatZar(p.amountCents)}</td>
+                      <td>
+                        {p.status}
+                        {p.failureCode ? ` (${p.failureCode})` : ""}
+                      </td>
+                      <td>{p.provider}</td>
+                      <td>{new Date(p.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {financePayments.length === 0 ? (
+                <p className="muted">No payments match.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {nav === "adjustments" ? (
+            <div className="stack">
+              <h1>Adjustments</h1>
+              <p className="muted">
+                Large Support refunds waiting for Finance approve or reject.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Job</th>
+                    <th>Amount</th>
+                    <th>Reason</th>
+                    <th>Who</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {adjustments.map((a) => (
+                    <tr key={a.id}>
+                      <td className="mono">{a.jobPublicCode}</td>
+                      <td>{formatZar(a.amountCents)}</td>
+                      <td>{a.reasonCode}</td>
+                      <td>{a.requesterEmail ?? "—"}</td>
+                      <td className="row-actions">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              await approveAdjustment(token, a.id);
+                              await refresh();
+                            })
+                          }
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              await rejectAdjustment(token, a.id, "rejected");
+                              await refresh();
+                            })
+                          }
+                        >
+                          Reject
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {adjustments.length === 0 ? (
+                <p className="muted">No adjustments waiting.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {nav === "statements" ? (
+            <div className="stack">
+              <h1>Statements</h1>
+              <p className="muted">
+                Organisation weekly statements. Enterprise can still download theirs.
+              </p>
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!statementOrgId) return;
+                  void run(async () => {
+                    await generateFinanceStatement(token, statementOrgId);
+                    await refresh();
+                  });
+                }}
+              >
+                <select
+                  value={statementOrgId}
+                  onChange={(e) => setStatementOrgId(e.target.value)}
+                >
+                  <option value="">Organisation…</option>
+                  {orgs.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={busy || !statementOrgId}>
+                  Generate statement
+                </button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Org</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statements.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.orgName}</td>
+                      <td>{formatZar(s.totalCents)}</td>
+                      <td>{s.status}</td>
+                      <td>{new Date(s.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <section className="page-section">
+                <h2>Credit note</h2>
+                <p className="muted">
+                  Memo credit only — does not auto-refund the card.
+                </p>
+                <form
+                  className="inline-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const cents = Math.round(Number(creditForm.amountRands) * 100);
+                    if (!Number.isFinite(cents) || cents <= 0) {
+                      setError("Enter a credit amount in rands");
+                      return;
+                    }
+                    void run(async () => {
+                      await createCreditNote(token, {
+                        amountCents: cents,
+                        reasonCode: creditForm.reasonCode,
+                        orgId: creditForm.orgId || undefined,
+                        jobId: creditForm.jobId || undefined,
+                      });
+                      setCreditForm({
+                        amountRands: "",
+                        reasonCode: "goodwill",
+                        orgId: "",
+                        jobId: "",
+                      });
+                    });
+                  }}
+                >
+                  <input
+                    placeholder="Amount (R)"
+                    value={creditForm.amountRands}
+                    onChange={(e) =>
+                      setCreditForm((f) => ({ ...f, amountRands: e.target.value }))
+                    }
+                  />
+                  <input
+                    placeholder="Reason code"
+                    value={creditForm.reasonCode}
+                    onChange={(e) =>
+                      setCreditForm((f) => ({ ...f, reasonCode: e.target.value }))
+                    }
+                  />
+                  <input
+                    placeholder="Org id (optional)"
+                    value={creditForm.orgId}
+                    onChange={(e) =>
+                      setCreditForm((f) => ({ ...f, orgId: e.target.value }))
+                    }
+                  />
+                  <button type="submit" disabled={busy}>
+                    Record credit
+                  </button>
+                </form>
+              </section>
+            </div>
+          ) : null}
+
+          {nav === "reconcile" ? (
+            <div className="stack">
+              <h1>Reconcile</h1>
+              <p className="muted">Manual match — no auto engine.</p>
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const cents = Math.round(Number(reconcileForm.amountRands) * 100);
+                  if (!Number.isFinite(cents)) {
+                    setError("Enter an amount in rands");
+                    return;
+                  }
+                  void run(async () => {
+                    await createReconcileItem(token, {
+                      source: reconcileForm.source,
+                      amountCents: cents,
+                      externalRef: reconcileForm.externalRef || undefined,
+                    });
+                    setReconcileForm({
+                      source: "manual",
+                      amountRands: "",
+                      externalRef: "",
+                    });
+                    await refresh();
+                  });
+                }}
+              >
+                <input
+                  placeholder="Source"
+                  value={reconcileForm.source}
+                  onChange={(e) =>
+                    setReconcileForm((f) => ({ ...f, source: e.target.value }))
+                  }
+                />
+                <input
+                  placeholder="Amount (R)"
+                  value={reconcileForm.amountRands}
+                  onChange={(e) =>
+                    setReconcileForm((f) => ({ ...f, amountRands: e.target.value }))
+                  }
+                />
+                <input
+                  placeholder="External ref"
+                  value={reconcileForm.externalRef}
+                  onChange={(e) =>
+                    setReconcileForm((f) => ({ ...f, externalRef: e.target.value }))
+                  }
+                />
+                <button type="submit" disabled={busy}>
+                  Add open item
+                </button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Amount</th>
+                    <th>Ref</th>
+                    <th>Match job id</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {reconcileItems.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.source}</td>
+                      <td>{formatZar(item.amountCents)}</td>
+                      <td className="mono">{item.externalRef ?? "—"}</td>
+                      <td>
+                        <input
+                          placeholder="job uuid"
+                          value={matchJobId[item.id] ?? ""}
+                          onChange={(e) =>
+                            setMatchJobId((m) => ({
+                              ...m,
+                              [item.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      </td>
+                      <td className="row-actions">
+                        <button
+                          type="button"
+                          disabled={busy || !matchJobId[item.id]?.trim()}
+                          onClick={() =>
+                            void run(async () => {
+                              await matchReconcileItem(
+                                token,
+                                item.id,
+                                matchJobId[item.id]!.trim(),
+                              );
+                              await refresh();
+                            })
+                          }
+                        >
+                          Match
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              await waiveReconcileItem(token, item.id, "waived");
+                              await refresh();
+                            })
+                          }
+                        >
+                          Waive
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {reconcileItems.length === 0 ? (
+                <p className="muted">No open reconcile items.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {nav === "exports" ? (
+            <div className="stack">
+              <h1>Exports</h1>
+              <p className="muted">Download CSV zip for a date range.</p>
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(async () => {
+                    const blob = await downloadFinanceExport(token, {
+                      from: new Date(exportFrom).toISOString(),
+                      to: new Date(`${exportTo}T23:59:59`).toISOString(),
+                      datasets: [
+                        "payments",
+                        "earnings",
+                        "payout_batches",
+                        "org_statements",
+                        "credit_notes",
+                        "reconcile_items",
+                      ],
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "vuush-finance-export.zip";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  });
+                }}
+              >
+                <label>
+                  From
+                  <input
+                    type="date"
+                    value={exportFrom}
+                    onChange={(e) => setExportFrom(e.target.value)}
+                  />
+                </label>
+                <label>
+                  To
+                  <input
+                    type="date"
+                    value={exportTo}
+                    onChange={(e) => setExportTo(e.target.value)}
+                  />
+                </label>
+                <button type="submit" disabled={busy}>
+                  Download zip
+                </button>
+              </form>
+            </div>
+          ) : null}
+
+          {nav === "audit-packs" ? (
+            <div className="stack">
+              <h1>Audit packs</h1>
+              <p className="muted">
+                Diligence zip for a window — jobs, money, audit events.
+              </p>
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(async () => {
+                    await createAuditPack(token, {
+                      from: new Date(exportFrom).toISOString(),
+                      to: new Date(`${exportTo}T23:59:59`).toISOString(),
+                    });
+                    await refresh();
+                  });
+                }}
+              >
+                <label>
+                  From
+                  <input
+                    type="date"
+                    value={exportFrom}
+                    onChange={(e) => setExportFrom(e.target.value)}
+                  />
+                </label>
+                <label>
+                  To
+                  <input
+                    type="date"
+                    value={exportTo}
+                    onChange={(e) => setExportTo(e.target.value)}
+                  />
+                </label>
+                <button type="submit" disabled={busy}>
+                  Create pack
+                </button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Range</th>
+                    <th>Status</th>
+                    <th>When</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditPacks.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        {new Date(p.periodStart).toLocaleDateString()} –{" "}
+                        {new Date(p.periodEnd).toLocaleDateString()}
+                      </td>
+                      <td>{p.status}</td>
+                      <td>{new Date(p.createdAt).toLocaleString()}</td>
+                      <td>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              const blob = await downloadAuditPack(token, p.id);
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `vuush-audit-pack-${p.id.slice(0, 8)}.zip`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            })
+                          }
+                        >
+                          Download
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
           {nav === "earnings" ? (
             <div className="stack">
               <h1>Earnings</h1>
@@ -1917,7 +2624,7 @@ function Console({
 
           {nav === "job-money" ? (
             <div className="stack">
-              <h1>Job money</h1>
+              <h1>Job ledger</h1>
               <p className="muted">
                 What the customer paid and what the driver earned on one job.
               </p>
@@ -1948,6 +2655,9 @@ function Console({
                     <span className="muted">
                       {" "}
                       · {jobMoney.job.state} · payment {jobMoney.job.paymentStatus}
+                      {jobMoney.job.orgId
+                        ? ` · org ${jobMoney.job.orgId.slice(0, 8)}…`
+                        : ""}
                     </span>
                   </p>
                   <h2>Payments</h2>
