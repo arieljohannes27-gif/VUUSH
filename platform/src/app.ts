@@ -24,6 +24,8 @@ export async function buildApp() {
     logger: {
       level: env.LOG_LEVEL,
     },
+    // Driver signup sends several base64 docs in one POST (beachhead).
+    bodyLimit: 15 * 1024 * 1024,
     trustProxy: true,
     genReqId: (req) => {
       const incoming = req.headers["x-correlation-id"];

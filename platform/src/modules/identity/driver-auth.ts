@@ -146,11 +146,25 @@ export async function signupDriver(input: {
     })
     .where(eq(driverProfiles.userId, user.id));
 
-  const otp = await requestOtp({
-    channel: "email",
-    destination: email,
-    correlationId: input.correlationId,
-  });
+  let otp: {
+    challengeId: string;
+    expiresAt: Date;
+    devCode?: string;
+  };
+  try {
+    otp = await requestOtp({
+      channel: "email",
+      destination: email,
+      correlationId: input.correlationId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "otp_delivery_failed";
+    return {
+      ok: false as const,
+      error: message,
+      userId: user.id,
+    };
+  }
 
   await writeAuditEvent({
     actorType: "user",

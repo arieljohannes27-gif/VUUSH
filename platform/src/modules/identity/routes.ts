@@ -100,6 +100,15 @@ export async function identityRoutes(app: FastifyInstance) {
       correlationId: request.id,
     });
     if (!result.ok) {
+      if (
+        result.error === "otp_delivery_failed" ||
+        result.error === "otp_email_not_configured"
+      ) {
+        return reply.status(503).send({
+          error: result.error,
+          userId: "userId" in result ? result.userId : undefined,
+        });
+      }
       return reply.status(400).send({ error: result.error });
     }
     return reply.status(201).send(result);

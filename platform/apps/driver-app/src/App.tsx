@@ -424,7 +424,13 @@ export default function App() {
           ? "Add a short pickup proof note first."
           : raw === "delivery_note_required"
             ? "Add a delivery / signature note first."
-            : raw;
+            : raw === "otp_delivery_failed" || raw === "otp_email_not_configured"
+              ? "We couldn’t email your code. Use the same Gmail as your Resend account, or sign in with password if you already submitted."
+              : raw === "email_taken"
+                ? "That email already has an account. Sign in instead."
+                : raw === "Failed to fetch" || raw.startsWith("request_failed_")
+                  ? "Upload failed — try smaller/clearer photos (not huge PDFs), then tap Continue again."
+                  : raw;
       setError(human);
     } finally {
       setBusy(false);
