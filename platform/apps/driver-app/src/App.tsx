@@ -41,9 +41,11 @@ import {
   verifyOtp,
 } from "./api";
 import { startOfferAlert, stopOfferAlert, unlockOfferAudio, OFFER_ALERT_MS } from "./offerSound";
-import { DocFileField } from "./DocFileField";
-import { LiveCamera } from "./LiveCamera";
-import { LiveVehicleCamera } from "./LiveVehicleCamera";
+import {
+  composeSaPhone,
+  SignupOnboarding,
+  type SignupDraft,
+} from "./SignupOnboarding";
 
 type Tab = "home" | "job" | "earnings" | "emergency" | "settings";
 type AuthView = "landing" | "signup" | "signin" | "verify";
@@ -144,6 +146,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [vehiclePlate, setVehiclePlate] = useState("");
+  const [vehicleClass, setVehicleClass] = useState<"bike" | "car" | "van">("car");
   const [vehiclePhotoUrl, setVehiclePhotoUrl] = useState<string | null>(null);
   const [idDocUrl, setIdDocUrl] = useState<string | null>(null);
   const [licenceDocUrl, setLicenceDocUrl] = useState<string | null>(null);
@@ -155,6 +158,7 @@ export default function App() {
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
   const [signupMode, setSignupMode] = useState(false);
+  const [signupStep, setSignupStep] = useState(1);
   const [proofNote, setProofNote] = useState("");
   const [failReason, setFailReason] = useState("customer_unavailable");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -458,9 +462,9 @@ export default function App() {
         email: email.trim(),
         password,
         displayName: displayName.trim(),
-        phone: phone.trim() || undefined,
+        phone: composeSaPhone(phone),
         vehiclePlate: vehiclePlate.trim() || undefined,
-        vehicleClass: "car",
+        vehicleClass,
         vehiclePhotoUrl,
         idDocUrl,
         licenceDocUrl,
@@ -749,156 +753,199 @@ export default function App() {
             <h1 className="login-brand">
               <BrandLockup />
             </h1>
-            <p className="login-title">Driver</p>
+            {authView === "landing" ? (
+              <p className="login-title">Driver</p>
+            ) : null}
           </div>
 
           {authView === "landing" && (
-            <div className="panel stack">
-              <p className="lede" style={{ fontSize: "1.25rem", lineHeight: 1.35 }}>
-                Earn on your terms. Deliver with pride.
+            <div className="onboard-landing">
+              <p className="onboard-title">Earn on your terms.</p>
+              <p className="onboard-support">
+                Flexible city runs, clear pay, and a team that has your back.
               </p>
-              <p className="muted">
-                Join VUUSH — flexible city runs, clear pay, and a team that has your back.
-              </p>
-              <button
-                className="btn btn-primary btn-block"
-                onClick={() => {
-                  setAuthView("signup");
-                  setError(null);
-                }}
-              >
-                Become a driver
-              </button>
-              <button
-                className="btn btn-block"
-                onClick={() => {
-                  setAuthView("signin");
-                  setError(null);
-                }}
-              >
-                I already have an account
-              </button>
+              <div className="onboard-footer">
+                <button
+                  className="btn btn-primary btn-block"
+                  onClick={() => {
+                    setAuthView("signup");
+                    setSignupStep(1);
+                    setError(null);
+                  }}
+                >
+                  Become a driver
+                </button>
+                <button
+                  className="btn btn-ghost btn-block"
+                  onClick={() => {
+                    setAuthView("signin");
+                    setError(null);
+                  }}
+                >
+                  I already have an account
+                </button>
+              </div>
             </div>
           )}
 
           {authView === "signup" && (
-            <div className="panel stack">
-              <p className="lede">Create your driver account</p>
-              <p className="muted">We’ll review your docs before you can go on duty.</p>
-              <label className="label" htmlFor="name">Full name</label>
-              <input id="name" className="field" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-              <label className="label" htmlFor="email">Email</label>
-              <input id="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-              <label className="label" htmlFor="password">Password (min 8)</label>
-              <input id="password" type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
-              <label className="label" htmlFor="phone">Phone</label>
-              <input id="phone" className="field" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              <label className="label" htmlFor="plate">Vehicle plate</label>
-              <input id="plate" className="field" value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value)} />
-
-              <DocFileField
-                label="ID document"
-                help="PDF or a clear photo of your ID."
-                value={idDocUrl}
-                onChange={setIdDocUrl}
-              />
-              <DocFileField
-                label="Driver licence"
-                help="PDF or a clear photo of your licence."
-                value={licenceDocUrl}
-                onChange={setLicenceDocUrl}
-              />
-              <LiveCamera
-                label="Photo of yourself — live only"
-                help="Take a selfie now with the camera. No PDF and no old gallery photos."
-                facing="user"
-                value={selfiePhotoUrl}
-                onCapture={setSelfiePhotoUrl}
-                onClear={() => setSelfiePhotoUrl(null)}
-              />
-              <LiveVehicleCamera
-                value={vehiclePhotoUrl}
-                onCapture={setVehiclePhotoUrl}
-                onClear={() => setVehiclePhotoUrl(null)}
-              />
-              <DocFileField
-                label="Vehicle insurance"
-                help="PDF or clear photo of your vehicle insurance document."
-                value={vehicleInsuranceDocUrl}
-                onChange={setVehicleInsuranceDocUrl}
-              />
-              <DocFileField
-                label="Goods insurance (min R100 000)"
-                help="PDF or clear photo proving goods / cargo cover of at least R100 000."
-                value={goodsInsuranceDocUrl}
-                onChange={setGoodsInsuranceDocUrl}
-              />
-              <DocFileField
-                label="Police clearance"
-                help="PDF or clear photo of your police clearance certificate."
-                value={policeClearanceDocUrl}
-                onChange={setPoliceClearanceDocUrl}
-              />
-
-              <button
-                className="btn btn-primary btn-block"
-                disabled={
-                  busy ||
-                  !idDocUrl ||
-                  !licenceDocUrl ||
-                  !selfiePhotoUrl ||
-                  !vehiclePhotoUrl ||
-                  !vehicleInsuranceDocUrl ||
-                  !goodsInsuranceDocUrl ||
-                  !policeClearanceDocUrl
+            <SignupOnboarding
+              step={signupStep}
+              busy={busy}
+              draft={{
+                displayName,
+                email,
+                password,
+                phoneLocal: phone,
+                vehiclePlate,
+                vehicleClass,
+                vehiclePhotoUrl,
+                idDocUrl,
+                licenceDocUrl,
+                selfiePhotoUrl,
+                vehicleInsuranceDocUrl,
+                goodsInsuranceDocUrl,
+                policeClearanceDocUrl,
+              }}
+              onChange={(patch: Partial<SignupDraft>) => {
+                if (patch.displayName !== undefined) setDisplayName(patch.displayName);
+                if (patch.email !== undefined) setEmail(patch.email);
+                if (patch.password !== undefined) setPassword(patch.password);
+                if (patch.phoneLocal !== undefined) setPhone(patch.phoneLocal);
+                if (patch.vehiclePlate !== undefined) setVehiclePlate(patch.vehiclePlate);
+                if (patch.vehicleClass !== undefined) setVehicleClass(patch.vehicleClass);
+                if (patch.vehiclePhotoUrl !== undefined) setVehiclePhotoUrl(patch.vehiclePhotoUrl);
+                if (patch.idDocUrl !== undefined) setIdDocUrl(patch.idDocUrl);
+                if (patch.licenceDocUrl !== undefined) setLicenceDocUrl(patch.licenceDocUrl);
+                if (patch.selfiePhotoUrl !== undefined) setSelfiePhotoUrl(patch.selfiePhotoUrl);
+                if (patch.vehicleInsuranceDocUrl !== undefined) {
+                  setVehicleInsuranceDocUrl(patch.vehicleInsuranceDocUrl);
                 }
-                onClick={handleSignup}
-              >
-                Continue — verify email
-              </button>
-              <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>
-                Back
-              </button>
-            </div>
+                if (patch.goodsInsuranceDocUrl !== undefined) {
+                  setGoodsInsuranceDocUrl(patch.goodsInsuranceDocUrl);
+                }
+                if (patch.policeClearanceDocUrl !== undefined) {
+                  setPoliceClearanceDocUrl(patch.policeClearanceDocUrl);
+                }
+              }}
+              onStep={setSignupStep}
+              onBackToLanding={() => {
+                setAuthView("landing");
+                setError(null);
+              }}
+              onSubmit={() => void handleSignup()}
+            />
           )}
 
           {authView === "signin" && (
-            <div className="panel stack">
-              <p className="lede">Sign in</p>
-              <label className="label" htmlFor="email2">Email</label>
-              <input id="email2" className="field" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-              <label className="label" htmlFor="password2">Password</label>
-              <input id="password2" type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-              <button className="btn btn-primary btn-block" disabled={busy} onClick={handlePasswordLogin}>
-                Sign in
-              </button>
-              <button className="btn btn-block" type="button" disabled={busy} onClick={handleRequestOtp}>
-                Use email code instead
-              </button>
-              <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>
-                Back
-              </button>
+            <div className="onboard">
+              <div className="onboard-hero">
+                <h2 className="onboard-title">Welcome back</h2>
+                <p className="onboard-support">Sign in to continue driving with VUUSH.</p>
+              </div>
+              <div className="onboard-body stack">
+                <label className="field-block">
+                  <span className="label">Email</span>
+                  <input
+                    id="email2"
+                    className="field"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                  />
+                </label>
+                <label className="field-block">
+                  <span className="label">Password</span>
+                  <input
+                    id="password2"
+                    type="password"
+                    className="field"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                </label>
+              </div>
+              <footer className="onboard-footer">
+                <button
+                  className="btn btn-primary btn-block"
+                  disabled={busy}
+                  onClick={handlePasswordLogin}
+                >
+                  Sign in
+                </button>
+                <button
+                  className="btn btn-ghost btn-block"
+                  type="button"
+                  disabled={busy}
+                  onClick={handleRequestOtp}
+                >
+                  Use email code instead
+                </button>
+                <button
+                  className="btn btn-ghost btn-block"
+                  type="button"
+                  onClick={() => setAuthView("landing")}
+                >
+                  Back
+                </button>
+              </footer>
             </div>
           )}
 
           {authView === "verify" && (
-            <div className="panel stack">
-              <p className="lede">Enter the code we sent</p>
-              <label className="label" htmlFor="otp">One-time code</label>
-              <input
-                id="otp"
-                className="field"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                inputMode="numeric"
-              />
-              {devCode && <p className="muted">Dev code: {devCode}</p>}
-              <button className="btn btn-primary btn-block" disabled={busy} onClick={handleVerifyOtp}>
-                Confirm
-              </button>
-              <button className="btn btn-block" type="button" onClick={() => setAuthView("landing")}>
-                Back
-              </button>
+            <div className="onboard">
+              <header className="onboard-progress">
+                <div className="onboard-progress-meta">
+                  <span>Email confirmation</span>
+                  <span>Almost there</span>
+                </div>
+                <div className="onboard-progress-track">
+                  <div className="onboard-progress-fill" style={{ width: "100%" }} />
+                </div>
+              </header>
+              <div className="onboard-hero">
+                <h2 className="onboard-title">Enter your code</h2>
+                <p className="onboard-support">
+                  We sent a short code to {email || "your email"}. It expires in a
+                  few minutes.
+                </p>
+              </div>
+              <div className="onboard-body stack">
+                <label className="field-block">
+                  <span className="label">One-time code</span>
+                  <input
+                    id="otp"
+                    className="field field-otp"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                  />
+                </label>
+                {devCode && <p className="muted">Dev code: {devCode}</p>}
+                <p className="trust-note">
+                  After this, Admin reviews your documents before you can go on
+                  duty.
+                </p>
+              </div>
+              <footer className="onboard-footer">
+                <button
+                  className="btn btn-primary btn-block"
+                  disabled={busy}
+                  onClick={handleVerifyOtp}
+                >
+                  Confirm and finish
+                </button>
+                <button
+                  className="btn btn-ghost btn-block"
+                  type="button"
+                  onClick={() => setAuthView("landing")}
+                >
+                  Back
+                </button>
+              </footer>
             </div>
           )}
         </div>
@@ -921,23 +968,28 @@ export default function App() {
           <h1 className="login-brand">
             <BrandLockup />
           </h1>
-          <div className="panel stack">
-            <p className="lede">
-              {appStatus === "rejected"
-                ? "Application not approved"
-                : appStatus === "needs_more_info"
-                  ? "We need a bit more from you"
-                  : "Thanks — we’re reviewing your application"}
-            </p>
-            <p className="muted">
-              {appStatus === "rejected"
-                ? profile?.reviewReason || "Please contact support if you have questions."
-                : "You’ll be able to go on duty after VUUSH clears your licence, insurance, and permits."}
-            </p>
-            <p className="muted">Signed in as {user.email}</p>
-            <button className="btn btn-block" onClick={signOut}>
-              Sign out
-            </button>
+          <div className="onboard">
+            <div className="onboard-hero">
+              <h2 className="onboard-title">
+                {appStatus === "rejected"
+                  ? "Application not approved"
+                  : appStatus === "needs_more_info"
+                    ? "We need a bit more from you"
+                    : "Waiting for approval"}
+              </h2>
+              <p className="onboard-support">
+                {appStatus === "rejected"
+                  ? profile?.reviewReason ||
+                    "Please contact support if you have questions."
+                  : "You’ll be able to go on duty after VUUSH clears your licence, insurance, and permits."}
+              </p>
+            </div>
+            <p className="trust-note">Signed in as {user.email}</p>
+            <footer className="onboard-footer">
+              <button className="btn btn-ghost btn-block" onClick={signOut}>
+                Sign out
+              </button>
+            </footer>
           </div>
         </div>
       </div>

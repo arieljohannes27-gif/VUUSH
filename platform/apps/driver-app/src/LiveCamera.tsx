@@ -3,21 +3,26 @@ import { useEffect, useRef, useState } from "react";
 type Props = {
   label: string;
   help: string;
+  /** Short tips shown before camera opens */
+  guide?: string[];
   /** user = selfie (front), environment = vehicle (rear) */
   facing: "user" | "environment";
   value: string | null;
   onCapture: (dataUrl: string) => void;
   onClear: () => void;
+  captureLabel?: string;
 };
 
 /** Live camera only — no gallery / file picker. */
 export function LiveCamera({
   label,
   help,
+  guide,
   facing,
   value,
   onCapture,
   onClear,
+  captureLabel = "Capture now",
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -92,80 +97,93 @@ export function LiveCamera({
 
   useEffect(() => () => stopCamera(), []);
 
+  const status = value ? "Uploaded" : live ? "Camera ready" : "Pending";
+  const statusTone = value ? "uploaded" : live ? "reading" : "pending";
+
   if (value) {
     return (
-      <div className="stack">
-        <p className="label">{label}</p>
-        <img
-          src={value}
-          alt={label}
-          style={{
-            width: "100%",
-            borderRadius: 8,
-            border: "1px solid var(--border, #ddd)",
-            maxHeight: 220,
-            objectFit: "cover",
-          }}
-        />
-        <p className="muted">Taken live with your camera.</p>
-        <button
-          type="button"
-          className="btn btn-block"
-          onClick={() => {
-            onClear();
-            void startCamera();
-          }}
-        >
-          Retake live photo
-        </button>
+      <div className={`upload-card upload-card--${statusTone}`}>
+        <div className="upload-card-top">
+          <div>
+            <p className="upload-card-title">{label}</p>
+            <p className="upload-card-help">Taken live with your camera</p>
+          </div>
+          <span className={`upload-status upload-status--${statusTone}`}>
+            {status}
+          </span>
+        </div>
+        <div className="upload-card-body">
+          <img src={value} alt={label} className="upload-card-thumb upload-card-thumb--tall" />
+          <button
+            type="button"
+            className="btn btn-secondary btn-block"
+            onClick={() => {
+              onClear();
+              void startCamera();
+            }}
+          >
+            Retake live photo
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="stack">
-      <p className="label">{label}</p>
-      <p className="muted">{help}</p>
-      {error && <div className="banner banner-error">{error}</div>}
-      <div
-        style={{
-          background: "#111",
-          borderRadius: 8,
-          overflow: "hidden",
-          minHeight: 160,
-        }}
-      >
+    <div className={`upload-card upload-card--${statusTone}`}>
+      <div className="upload-card-top">
+        <div>
+          <p className="upload-card-title">{label}</p>
+          <p className="upload-card-help">{help}</p>
+        </div>
+        <span className={`upload-status upload-status--${statusTone}`}>
+          {status}
+        </span>
+      </div>
+
+      {guide && guide.length > 0 && !live && (
+        <ul className="capture-guide">
+          {guide.map((tip) => (
+            <li key={tip}>{tip}</li>
+          ))}
+        </ul>
+      )}
+
+      {error && <p className="upload-card-error">{error}</p>}
+
+      <div className="capture-stage">
         <video
           ref={videoRef}
           playsInline
           muted
+          className="capture-video"
           style={{
-            width: "100%",
             display: live ? "block" : "none",
-            maxHeight: 240,
-            objectFit: "cover",
             transform: facing === "user" ? "scaleX(-1)" : undefined,
           }}
         />
         {!live && (
-          <p className="muted" style={{ padding: 24, textAlign: "center", color: "#ccc" }}>
-            Camera off
-          </p>
+          <p className="capture-stage-idle">Camera off until you are ready</p>
         )}
       </div>
+
       {!live ? (
-        <button type="button" className="btn btn-primary btn-block" onClick={() => void startCamera()}>
+        <button
+          type="button"
+          className="btn btn-primary btn-block"
+          onClick={() => void startCamera()}
+        >
           Open camera
         </button>
       ) : (
-        <>
+        <div className="stack stack-tight">
           <button type="button" className="btn btn-primary btn-block" onClick={snap}>
-            Capture now
+            {captureLabel}
           </button>
-          <button type="button" className="btn btn-block" onClick={stopCamera}>
+          <button type="button" className="btn btn-ghost btn-block" onClick={stopCamera}>
             Cancel
           </button>
-        </>
+        </div>
       )}
     </div>
   );

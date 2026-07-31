@@ -10,9 +10,15 @@ type Props = {
 export function LiveVehicleCamera(props: Props) {
   return (
     <LiveCamera
-      label="Vehicle photo — live only"
-      help="Photograph your vehicle now. Old photos from your gallery are not allowed."
+      label="Vehicle photo"
+      help="Photograph your vehicle now. Gallery photos are not accepted."
+      guide={[
+        "Stand where the plate and side of the vehicle are clear",
+        "Use daylight or a bright area",
+        "Hold steady — one clear shot is enough",
+      ]}
       facing="environment"
+      captureLabel="Capture vehicle"
       {...props}
     />
   );
