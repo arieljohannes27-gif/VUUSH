@@ -27,6 +27,8 @@ import {
   listOrgSites,
   listPendingApprovalJobs,
   revokeOrgApiKey,
+  completeEnterpriseRegister,
+  startEnterpriseRegister,
   signupEnterprise,
   suburbSortStops,
   updateOrganisation,
@@ -70,6 +72,22 @@ function mapError(err: unknown) {
             message === "org_not_active" ||
             message === "forbidden_role"
           ? 403
+          : message === "invalid_code" ||
+              message === "challenge_invalid_or_expired" ||
+              message === "challenge_locked" ||
+              message === "email_mismatch" ||
+              message === "password_too_short" ||
+              message === "billing_email_required" ||
+              message === "org_name_required" ||
+              message === "display_name_required" ||
+              message === "invalid_email" ||
+              message === "pay_mode_invalid" ||
+              message === "company_doc_invalid" ||
+              message === "company_doc_invalid_too_large" ||
+              message === "email_verification_required" ||
+              message === "otp_delivery_failed" ||
+              message === "otp_email_not_configured"
+            ? 400
           : message === "no_billable_jobs" ||
               message === "stops_min_two" ||
               message === "illegal_transition" ||
@@ -177,7 +195,9 @@ export async function enterpriseRoutes(app: FastifyInstance) {
       const { orgId } = request.params as { orgId: string };
       const parsed = z
         .object({
-          status: z.enum(["active", "suspended"]).optional(),
+          status: z
+            .enum(["active", "suspended", "pending_review", "rejected"])
+            .optional(),
           billingEmail: z.string().email().nullable().optional(),
           approvalThresholdCents: z
             .number()
@@ -262,32 +282,97 @@ export async function enterpriseRoutes(app: FastifyInstance) {
     },
   );
 
-  /* —— Public signup —— */
+  /* —— Public signup (email verify once → password → auto-approve) —— */
 
-  app.post("/v1/enterprise/signup", async (request, reply) => {
-    const parsed = z
-      .object({
-        companyName: z.string().min(2).max(200),
-        displayName: z.string().min(2).max(200),
-        email: z.string().email(),
-        password: z.string().min(8).max(200),
-      })
-      .safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({ error: "validation_error" });
-    }
-    try {
-      const result = await signupEnterprise({
-        ...parsed.data,
-        ipAddress: request.ip,
-        userAgent: request.headers["user-agent"],
-        correlationId: request.id,
-      });
-      return reply.status(201).send(result);
-    } catch (err) {
-      const mapped = mapError(err);
-      return reply.status(mapped.status).send({ error: mapped.error });
-    }
+  await app.register(async (scoped) => {
+    await scoped.register(import("@fastify/rate-limit"), {
+      max: 10,
+      timeWindow: "1 minute",
+    });
+
+    scoped.post("/v1/enterprise/register/start", async (request, reply) => {
+      const parsed = z
+        .object({
+          companyName: z.string().min(2).max(200),
+          displayName: z.string().min(2).max(200),
+          email: z.string().email(),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const result = await startEnterpriseRegister({
+          ...parsed.data,
+          correlationId: request.id,
+        });
+        return reply.send(result);
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    });
+
+    scoped.post("/v1/enterprise/register/complete", async (request, reply) => {
+      const parsed = z
+        .object({
+          challengeId: z.string().uuid(),
+          code: z.string().min(4).max(12),
+          companyName: z.string().min(2).max(200),
+          displayName: z.string().min(2).max(200),
+          email: z.string().email(),
+          password: z.string().min(8).max(200),
+          billingEmail: z.string().email(),
+          billingContactName: z.string().min(2).max(200).optional(),
+          payMode: z.enum(["statement", "card"]).optional(),
+          cityCode: z.string().min(2).max(16).optional(),
+          registrationNumber: z.string().max(80).optional(),
+          vatNumber: z.string().max(80).optional(),
+          companyDocUrl: z.string().max(1_500_000).optional(),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const result = await completeEnterpriseRegister({
+          ...parsed.data,
+          ipAddress: request.ip,
+          userAgent: request.headers["user-agent"],
+          correlationId: request.id,
+        });
+        return reply.status(201).send(result);
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    });
+
+    scoped.post("/v1/enterprise/signup", async (request, reply) => {
+      const parsed = z
+        .object({
+          companyName: z.string().min(2).max(200),
+          displayName: z.string().min(2).max(200),
+          email: z.string().email(),
+          password: z.string().min(8).max(200),
+        })
+        .safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "validation_error" });
+      }
+      try {
+        const result = await signupEnterprise({
+          ...parsed.data,
+          ipAddress: request.ip,
+          userAgent: request.headers["user-agent"],
+          correlationId: request.id,
+        });
+        return reply.status(201).send(result);
+      } catch (err) {
+        const mapped = mapError(err);
+        return reply.status(mapped.status).send({ error: mapped.error });
+      }
+    });
   });
 
   /* —— Portal (E1) —— */

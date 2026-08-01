@@ -272,6 +272,9 @@ export type AdminOrganisation = {
   name: string;
   status: string;
   billingEmail: string | null;
+  billingContactName?: string | null;
+  registrationNumber?: string | null;
+  vatNumber?: string | null;
   approvalThresholdCents: number | null;
   payMode: string;
   cityCode: string;
@@ -299,7 +302,7 @@ export async function updateOrganisation(
   token: string,
   orgId: string,
   body: {
-    status?: "active" | "suspended";
+    status?: "active" | "suspended" | "pending_review" | "rejected";
     billingEmail?: string | null;
     approvalThresholdCents?: number | null;
   },

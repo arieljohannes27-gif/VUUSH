@@ -88,6 +88,47 @@ export async function loginWithPassword(email: string, password: string) {
   });
 }
 
+export async function startEnterpriseRegister(body: {
+  companyName: string;
+  displayName: string;
+  email: string;
+}) {
+  return api<{ challengeId: string; expiresAt: string; devCode?: string }>(
+    "/v1/enterprise/register/start",
+    { body },
+  );
+}
+
+export async function completeEnterpriseRegister(body: {
+  challengeId: string;
+  code: string;
+  companyName: string;
+  displayName: string;
+  email: string;
+  password: string;
+  billingEmail: string;
+  billingContactName?: string;
+  payMode?: "statement" | "card";
+  cityCode?: string;
+  registrationNumber?: string;
+  vatNumber?: string;
+  companyDocUrl?: string;
+}) {
+  return api<{
+    status: string;
+    session?: { accessToken: string };
+    user?: SessionUser;
+    org: {
+      id: string;
+      name: string;
+      cityCode?: string;
+      payMode?: string;
+      status?: string;
+    };
+    membership?: { orgId: string; role: string; membershipId: string };
+  }>("/v1/enterprise/register/complete", { body });
+}
+
 export async function signupEnterprise(body: {
   companyName: string;
   displayName: string;

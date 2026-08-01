@@ -1123,12 +1123,95 @@ function Console({
             <section className="stack">
               <h1>Organisations</h1>
               <p className="muted">
-                Create orgs, invite people, or open Members to reset a forgotten
-                password (new temporary password only — old ones cannot be
+                Approve new company registrations, invite people, or reset a
+                forgotten password (temporary password only — old ones cannot be
                 viewed).
               </p>
               {tempPasswordNotice ? (
                 <p className="notice">{tempPasswordNotice}</p>
+              ) : null}
+
+              {orgs.some((o) => o.status === "pending_review") ? (
+                <div className="panel stack">
+                  <h2>Awaiting your approval</h2>
+                  <p className="muted">
+                    Companies that registered on Enterprise. Approve to open
+                    portal access, or reject if the details look wrong.
+                  </p>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Company</th>
+                        <th>Billing</th>
+                        <th>Details</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orgs
+                        .filter((o) => o.status === "pending_review")
+                        .map((o) => (
+                          <tr key={o.id}>
+                            <td>
+                              <div>{o.name}</div>
+                              <div className="muted">
+                                {o.cityCode} · {o.payMode}
+                              </div>
+                            </td>
+                            <td>
+                              <div>{o.billingEmail || "—"}</div>
+                              <div className="muted">
+                                {o.billingContactName || "—"}
+                              </div>
+                            </td>
+                            <td className="muted">
+                              {[
+                                o.registrationNumber
+                                  ? `Reg ${o.registrationNumber}`
+                                  : null,
+                                o.vatNumber ? `VAT ${o.vatNumber}` : null,
+                                `${o.memberCount} member${o.memberCount === 1 ? "" : "s"}`,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </td>
+                            <td className="row-actions">
+                              <button
+                                className="btn btn-primary"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  void run(async () => {
+                                    await updateOrganisation(token, o.id, {
+                                      status: "active",
+                                    });
+                                    await refresh();
+                                  })
+                                }
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="btn"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  void run(async () => {
+                                    await updateOrganisation(token, o.id, {
+                                      status: "rejected",
+                                    });
+                                    await refresh();
+                                  })
+                                }
+                              >
+                                Reject
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : null}
 
               <div className="panel stack">
@@ -1276,6 +1359,38 @@ function Console({
                           >
                             Members
                           </button>
+                          {o.status === "pending_review" ? (
+                            <>
+                              <button
+                                className="btn btn-primary"
+                                type="button"
+                                onClick={() =>
+                                  void run(async () => {
+                                    await updateOrganisation(token, o.id, {
+                                      status: "active",
+                                    });
+                                    await refresh();
+                                  })
+                                }
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="btn"
+                                type="button"
+                                onClick={() =>
+                                  void run(async () => {
+                                    await updateOrganisation(token, o.id, {
+                                      status: "rejected",
+                                    });
+                                    await refresh();
+                                  })
+                                }
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : null}
                           {o.status === "active" ? (
                             <button
                               className="btn"
@@ -1291,7 +1406,8 @@ function Console({
                             >
                               Suspend
                             </button>
-                          ) : (
+                          ) : null}
+                          {o.status === "suspended" || o.status === "rejected" ? (
                             <button
                               className="btn btn-primary"
                               type="button"
@@ -1304,9 +1420,9 @@ function Console({
                                 })
                               }
                             >
-                              Reactivate
+                              Activate
                             </button>
-                          )}
+                          ) : null}
                         </td>
                       </tr>
                     ))

@@ -20,14 +20,10 @@ import {
   formatZar,
   generateStatement,
   inviteMember,
-  loginWithPassword,
   quoteEnterpriseJob,
   rejectJob,
-  requestOtp,
   revokeApiKey,
   setApprovalThreshold,
-  signupEnterprise,
-  verifyOtp,
   type EnterpriseJob,
   type EnterpriseQuote,
   type OrgMember,
@@ -36,6 +32,7 @@ import {
   type SessionUser,
 } from "./api";
 import { StopOrderMap } from "./StopOrderMap";
+import { EnterpriseAuth } from "./EnterpriseAuth";
 
 type Nav =
   | "home"
@@ -102,22 +99,6 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"signin" | "signup" | "otp">(
-    "signin",
-  );
-  const [signup, setSignup] = useState({
-    companyName: "",
-    displayName: "",
-    email: "",
-    password: "",
-    confirm: "",
-  });
-  const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [otp, setOtp] = useState("");
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   const [home, setHome] = useState<Awaited<
     ReturnType<typeof fetchEnterpriseHome>
@@ -263,292 +244,17 @@ export default function App() {
 
   if (!token || !user || !active) {
     return (
-      <div className="shell">
-        <header className="bar">
-          <div className="lockup">
-            <span className="mark" aria-hidden="true" />
-            <span className="word">VUUSH</span>
-          </div>
-          <span className="meta">Enterprise</span>
-        </header>
-        <main className="auth">
-          <p className="brand">VUUSH</p>
-          <h1>
-            {authMode === "signup"
-              ? "Create company"
-              : authMode === "otp"
-                ? "Email code"
-                : "Sign in"}
-          </h1>
-          <p className="lede">
-            {authMode === "signup"
-              ? "Register your company. You become the Org Admin."
-              : authMode === "otp"
-                ? "For accounts invited without a password."
-                : "Use your work email and password."}
-          </p>
-
-          <div className="auth-tabs" role="tablist" aria-label="Auth mode">
-            <button
-              type="button"
-              className={authMode === "signin" ? "nav-item active" : "nav-item"}
-              onClick={() => {
-                setAuthMode("signin");
-                setError(null);
-              }}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              className={authMode === "signup" ? "nav-item active" : "nav-item"}
-              onClick={() => {
-                setAuthMode("signup");
-                setError(null);
-              }}
-            >
-              Sign up
-            </button>
-          </div>
-
-          {authMode === "signin" ? (
-            <form
-              className="stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(async () => {
-                  const res = await loginWithPassword(
-                    email.trim(),
-                    password,
-                  );
-                  if (
-                    res.status !== "authenticated" ||
-                    !res.session?.accessToken
-                  ) {
-                    throw new Error(res.status || "auth_failed");
-                  }
-                  writeToken(res.session.accessToken);
-                  setToken(res.session.accessToken);
-                  await bootstrap(res.session.accessToken);
-                });
-              }}
-            >
-              <label className="label" htmlFor="email">
-                Work email
-              </label>
-              <input
-                id="email"
-                className="field"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <label className="label" htmlFor="password">
-                Password
-              </label>
-              <input
-                id="password"
-                className="field"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-              />
-              {error ? <p className="error">{error}</p> : null}
-              <button className="cta" type="submit" disabled={busy}>
-                Sign in
-              </button>
-              <button
-                type="button"
-                className="text-link"
-                onClick={() => {
-                  setAuthMode("otp");
-                  setChallengeId(null);
-                  setError(null);
-                }}
-              >
-                Use email code instead
-              </button>
-            </form>
-          ) : null}
-
-          {authMode === "signup" ? (
-            <form
-              className="stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(async () => {
-                  if (signup.password !== signup.confirm) {
-                    throw new Error("passwords_do_not_match");
-                  }
-                  const res = await signupEnterprise({
-                    companyName: signup.companyName.trim(),
-                    displayName: signup.displayName.trim(),
-                    email: signup.email.trim(),
-                    password: signup.password,
-                  });
-                  writeToken(res.session.accessToken);
-                  writeOrgId(res.org.id);
-                  setToken(res.session.accessToken);
-                  setOrgId(res.org.id);
-                  await bootstrap(res.session.accessToken);
-                });
-              }}
-            >
-              <label className="label" htmlFor="company">
-                Company name
-              </label>
-              <input
-                id="company"
-                className="field"
-                value={signup.companyName}
-                onChange={(e) =>
-                  setSignup((s) => ({ ...s, companyName: e.target.value }))
-                }
-                required
-                minLength={2}
-              />
-              <label className="label" htmlFor="display">
-                Your name
-              </label>
-              <input
-                id="display"
-                className="field"
-                value={signup.displayName}
-                onChange={(e) =>
-                  setSignup((s) => ({ ...s, displayName: e.target.value }))
-                }
-                required
-                minLength={2}
-              />
-              <label className="label" htmlFor="signup-email">
-                Work email
-              </label>
-              <input
-                id="signup-email"
-                className="field"
-                type="email"
-                autoComplete="email"
-                value={signup.email}
-                onChange={(e) =>
-                  setSignup((s) => ({ ...s, email: e.target.value }))
-                }
-                required
-              />
-              <label className="label" htmlFor="signup-password">
-                Password (min 8)
-              </label>
-              <input
-                id="signup-password"
-                className="field"
-                type="password"
-                autoComplete="new-password"
-                value={signup.password}
-                onChange={(e) =>
-                  setSignup((s) => ({ ...s, password: e.target.value }))
-                }
-                required
-                minLength={8}
-              />
-              <label className="label" htmlFor="signup-confirm">
-                Confirm password
-              </label>
-              <input
-                id="signup-confirm"
-                className="field"
-                type="password"
-                autoComplete="new-password"
-                value={signup.confirm}
-                onChange={(e) =>
-                  setSignup((s) => ({ ...s, confirm: e.target.value }))
-                }
-                required
-                minLength={8}
-              />
-              {error ? <p className="error">{error}</p> : null}
-              <button className="cta" type="submit" disabled={busy}>
-                Create company
-              </button>
-            </form>
-          ) : null}
-
-          {authMode === "otp" ? (
-            <form
-              className="stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(async () => {
-                  if (!challengeId) {
-                    const res = await requestOtp(email.trim());
-                    setChallengeId(res.challengeId);
-                    setDevCode(res.devCode ?? null);
-                    if (res.devCode) setOtp(res.devCode);
-                    return;
-                  }
-                  const res = await verifyOtp(challengeId, otp.trim());
-                  if (
-                    res.status !== "authenticated" ||
-                    !res.session?.accessToken
-                  ) {
-                    throw new Error(res.status || "auth_failed");
-                  }
-                  writeToken(res.session.accessToken);
-                  setToken(res.session.accessToken);
-                  await bootstrap(res.session.accessToken);
-                });
-              }}
-            >
-              <label className="label" htmlFor="otp-email">
-                Work email
-              </label>
-              <input
-                id="otp-email"
-                className="field"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={Boolean(challengeId)}
-                required
-              />
-              {challengeId ? (
-                <>
-                  <label className="label" htmlFor="otp">
-                    Code
-                  </label>
-                  <input
-                    id="otp"
-                    className="field"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    required
-                  />
-                </>
-              ) : null}
-              {devCode ? <p className="hint">Dev code: {devCode}</p> : null}
-              {error ? <p className="error">{error}</p> : null}
-              <button className="cta" type="submit" disabled={busy}>
-                {challengeId ? "Enter" : "Send code"}
-              </button>
-              <button
-                type="button"
-                className="text-link"
-                onClick={() => {
-                  setAuthMode("signin");
-                  setChallengeId(null);
-                  setError(null);
-                }}
-              >
-                Back to password sign in
-              </button>
-            </form>
-          ) : null}
-        </main>
-      </div>
+      <EnterpriseAuth
+        onAuthed={async (accessToken, nextOrgId) => {
+          writeToken(accessToken);
+          if (nextOrgId) {
+            writeOrgId(nextOrgId);
+            setOrgId(nextOrgId);
+          }
+          setToken(accessToken);
+          await bootstrap(accessToken, nextOrgId);
+        }}
+      />
     );
   }
 
@@ -612,8 +318,6 @@ export default function App() {
               setToken(null);
               setUser(null);
               setMemberships([]);
-              setChallengeId(null);
-              setOtp("");
             }}
           >
             Sign out

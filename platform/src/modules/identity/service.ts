@@ -245,41 +245,15 @@ export async function verifyOtp(input: {
   /** Driver signup/login OTP must not force staff TOTP mid-flow. */
   skipStaffMfa?: boolean;
 }) {
-  const challenge = await db.query.otpChallenges.findFirst({
-    where: eq(otpChallenges.id, input.challengeId),
+  const consumed = await consumeOtpChallenge({
+    challengeId: input.challengeId,
+    code: input.code,
+    correlationId: input.correlationId,
   });
+  if (!consumed.ok) return consumed;
 
-  if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
-    return { ok: false as const, error: "challenge_invalid_or_expired" };
-  }
-  if (challenge.attempts >= challenge.maxAttempts) {
-    return { ok: false as const, error: "challenge_locked" };
-  }
-
-  const valid = hashSecret(input.code.trim()) === challenge.codeHash;
-  await db
-    .update(otpChallenges)
-    .set({ attempts: challenge.attempts + 1 })
-    .where(eq(otpChallenges.id, challenge.id));
-
-  if (!valid) {
-    await writeAuditEvent({
-      actorType: "system",
-      action: "AUTH_OTP_FAILED",
-      subjectType: "otp_challenge",
-      subjectId: challenge.id,
-      correlationId: input.correlationId,
-    });
-    return { ok: false as const, error: "invalid_code" };
-  }
-
-  await db
-    .update(otpChallenges)
-    .set({ consumedAt: new Date() })
-    .where(eq(otpChallenges.id, challenge.id));
-
-  const channel = challenge.channel as "phone" | "email";
-  const user = await findOrCreateUser(channel, challenge.destination);
+  const channel = consumed.channel;
+  const user = await findOrCreateUser(channel, consumed.destination);
   if (user.status !== "active") {
     return { ok: false as const, error: "user_inactive" };
   }
@@ -337,6 +311,52 @@ export async function verifyOtp(input: {
     status: "authenticated" as const,
     session,
     user: publicUser(user, roles),
+  };
+}
+
+/** Validate + consume an OTP challenge without creating a session. */
+export async function consumeOtpChallenge(input: {
+  challengeId: string;
+  code: string;
+  correlationId?: string;
+}) {
+  const challenge = await db.query.otpChallenges.findFirst({
+    where: eq(otpChallenges.id, input.challengeId),
+  });
+
+  if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
+    return { ok: false as const, error: "challenge_invalid_or_expired" };
+  }
+  if (challenge.attempts >= challenge.maxAttempts) {
+    return { ok: false as const, error: "challenge_locked" };
+  }
+
+  const valid = hashSecret(input.code.trim()) === challenge.codeHash;
+  await db
+    .update(otpChallenges)
+    .set({ attempts: challenge.attempts + 1 })
+    .where(eq(otpChallenges.id, challenge.id));
+
+  if (!valid) {
+    await writeAuditEvent({
+      actorType: "system",
+      action: "AUTH_OTP_FAILED",
+      subjectType: "otp_challenge",
+      subjectId: challenge.id,
+      correlationId: input.correlationId,
+    });
+    return { ok: false as const, error: "invalid_code" };
+  }
+
+  await db
+    .update(otpChallenges)
+    .set({ consumedAt: new Date() })
+    .where(eq(otpChallenges.id, challenge.id));
+
+  return {
+    ok: true as const,
+    channel: challenge.channel as "phone" | "email",
+    destination: challenge.destination,
   };
 }
 

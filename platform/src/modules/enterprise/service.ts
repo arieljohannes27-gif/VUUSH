@@ -17,7 +17,14 @@ import {
 import { writeAuditEvent } from "../audit/service.js";
 import { hashPassword } from "../identity/crypto.js";
 import { emailLookupCandidates } from "../identity/email-aliases.js";
-import { assignRole, createSessionForUser, getUserRoles } from "../identity/service.js";
+import {
+  assignRole,
+  consumeOtpChallenge,
+  createSessionForUser,
+  getUserRoles,
+  requestOtp,
+} from "../identity/service.js";
+import { assertPdfOrImageDataUrl } from "../identity/doc-validate.js";
 
 const ORG_ROLES = ["org_admin", "booker", "approver", "viewer"] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
@@ -52,6 +59,9 @@ export async function listOrganisations() {
       name: organisations.name,
       status: organisations.status,
       billingEmail: organisations.billingEmail,
+      billingContactName: organisations.billingContactName,
+      registrationNumber: organisations.registrationNumber,
+      vatNumber: organisations.vatNumber,
       approvalThresholdCents: organisations.approvalThresholdCents,
       payMode: organisations.payMode,
       cityCode: organisations.cityCode,
@@ -95,13 +105,10 @@ export async function getOrganisation(orgId: string) {
 }
 
 /** Self-serve: company + Org Admin account with password (returned session). */
-export async function signupEnterprise(input: {
+export async function startEnterpriseRegister(input: {
   companyName: string;
   displayName: string;
   email: string;
-  password: string;
-  ipAddress?: string;
-  userAgent?: string;
   correlationId?: string;
 }) {
   const companyName = input.companyName.trim();
@@ -110,7 +117,6 @@ export async function signupEnterprise(input: {
   if (companyName.length < 2) throw new Error("org_name_required");
   if (displayName.length < 2) throw new Error("display_name_required");
   if (!email.includes("@")) throw new Error("invalid_email");
-  if (input.password.length < 8) throw new Error("password_too_short");
 
   const nameTaken = await db.query.organisations.findFirst({
     where: eq(organisations.name, companyName),
@@ -120,28 +126,144 @@ export async function signupEnterprise(input: {
   const existingUser = await db.query.users.findFirst({
     where: inArray(users.email, emailLookupCandidates(email)),
   });
-  if (existingUser) throw new Error("email_taken");
+  if (existingUser?.passwordHash) throw new Error("email_taken");
+
+  const otp = await requestOtp({
+    channel: "email",
+    destination: email,
+    correlationId: input.correlationId,
+  });
+
+  await writeAuditEvent({
+    actorType: "system",
+    action: "ORG_REGISTER_START",
+    subjectType: "organisation",
+    subjectId: null,
+    correlationId: input.correlationId,
+    payload: { email, companyName },
+  });
+
+  return {
+    challengeId: otp.challengeId,
+    expiresAt: otp.expiresAt,
+    ...(otp.devCode ? { devCode: otp.devCode } : {}),
+  };
+}
+
+export async function completeEnterpriseRegister(input: {
+  challengeId: string;
+  code: string;
+  companyName: string;
+  displayName: string;
+  email: string;
+  password: string;
+  billingEmail: string;
+  billingContactName?: string;
+  payMode?: "statement" | "card";
+  cityCode?: string;
+  registrationNumber?: string;
+  vatNumber?: string;
+  companyDocUrl?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  correlationId?: string;
+}) {
+  const companyName = input.companyName.trim();
+  const displayName = input.displayName.trim();
+  const email = input.email.trim().toLowerCase();
+  const billingEmail = input.billingEmail.trim().toLowerCase();
+  const billingContactName = input.billingContactName?.trim() || displayName;
+  const payMode = input.payMode ?? "statement";
+  const cityCode = (input.cityCode ?? "CPT").trim().toUpperCase() || "CPT";
+  const registrationNumber = input.registrationNumber?.trim() || null;
+  const vatNumber = input.vatNumber?.trim() || null;
+
+  if (companyName.length < 2) throw new Error("org_name_required");
+  if (displayName.length < 2) throw new Error("display_name_required");
+  if (!email.includes("@")) throw new Error("invalid_email");
+  if (!billingEmail.includes("@")) throw new Error("billing_email_required");
+  if (input.password.length < 8) throw new Error("password_too_short");
+  if (payMode !== "statement" && payMode !== "card") {
+    throw new Error("pay_mode_invalid");
+  }
+
+  const consumed = await consumeOtpChallenge({
+    challengeId: input.challengeId,
+    code: input.code,
+    correlationId: input.correlationId,
+  });
+  if (!consumed.ok) throw new Error(consumed.error);
+  if (consumed.channel !== "email") throw new Error("invalid_code");
+  if (consumed.destination.trim().toLowerCase() !== email) {
+    throw new Error("email_mismatch");
+  }
+
+  let companyDocUrl: string | null = null;
+  if (input.companyDocUrl?.trim()) {
+    const doc = assertPdfOrImageDataUrl(
+      input.companyDocUrl.trim(),
+      "company_doc_invalid",
+    );
+    if (typeof doc !== "string") throw new Error(doc.error);
+    companyDocUrl = doc;
+  }
+
+  const nameTaken = await db.query.organisations.findFirst({
+    where: eq(organisations.name, companyName),
+  });
+  if (nameTaken) throw new Error("org_name_taken");
+
+  const existingUser = await db.query.users.findFirst({
+    where: inArray(users.email, emailLookupCandidates(email)),
+  });
+  if (existingUser?.passwordHash) throw new Error("email_taken");
+
+  const missingRequired =
+    !billingEmail || !billingContactName || companyName.length < 2;
+  // Self-serve signups always wait for VUUSH Admin approval.
+  const status = "pending_review";
+  void missingRequired;
 
   const [org] = await db
     .insert(organisations)
     .values({
       name: companyName,
-      billingEmail: email,
-      payMode: "statement",
-      cityCode: "CPT",
-      status: "active",
+      billingEmail,
+      billingContactName,
+      registrationNumber,
+      vatNumber,
+      companyDocUrl,
+      payMode,
+      cityCode,
+      status,
     })
     .returning();
 
-  const [user] = await db
-    .insert(users)
-    .values({
-      email,
-      displayName,
-      passwordHash: hashPassword(input.password),
-      status: "active",
-    })
-    .returning();
+  let user = existingUser;
+  if (!user) {
+    [user] = await db
+      .insert(users)
+      .values({
+        email,
+        displayName,
+        passwordHash: hashPassword(input.password),
+        status: "active",
+      })
+      .returning();
+  } else {
+    await db
+      .update(users)
+      .set({
+        displayName,
+        passwordHash: hashPassword(input.password),
+        status: "active",
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
+    user = (
+      await db.query.users.findFirst({ where: eq(users.id, user.id) })
+    )!;
+  }
 
   const [membership] = await db
     .insert(orgMemberships)
@@ -164,46 +286,65 @@ export async function signupEnterprise(input: {
   await writeAuditEvent({
     actorType: "user",
     actorId: user.id,
-    action: "ORG_SELF_SIGNUP",
+    action: "ORG_SELF_SIGNUP_REVIEW",
     subjectType: "organisation",
     subjectId: org.id,
     correlationId: input.correlationId,
-    payload: { email, membershipId: membership.id },
-  });
-
-  const roles = await getUserRoles(user.id);
-  const session = await createSessionForUser({
-    userId: user.id,
-    mfaSatisfied: true,
-    ipAddress: input.ipAddress,
-    userAgent: input.userAgent,
-    correlationId: input.correlationId,
+    payload: {
+      email,
+      membershipId: membership.id,
+      status,
+      payMode,
+      hasCompanyDoc: Boolean(companyDocUrl),
+      incomplete: missingRequired,
+    },
   });
 
   return {
-    status: "authenticated" as const,
-    session,
-    user: {
-      id: user.id,
-      email: user.email,
-      phone: user.phone,
-      displayName: user.displayName,
-      status: user.status,
-      totpEnabled: user.totpEnabled,
-      roles,
-    },
+    status: "pending_review" as const,
     org: {
       id: org.id,
       name: org.name,
       cityCode: org.cityCode,
       payMode: org.payMode,
-    },
-    membership: {
-      orgId: org.id,
-      role: membership.role,
-      membershipId: membership.id,
+      status: org.status,
     },
   };
+}
+
+/** @deprecated Prefer startEnterpriseRegister + completeEnterpriseRegister */
+export async function signupEnterprise(input: {
+  companyName: string;
+  displayName: string;
+  email: string;
+  password: string;
+  ipAddress?: string;
+  userAgent?: string;
+  correlationId?: string;
+}) {
+  const start = await startEnterpriseRegister({
+    companyName: input.companyName,
+    displayName: input.displayName,
+    email: input.email,
+    correlationId: input.correlationId,
+  });
+  if (!start.devCode) {
+    throw new Error("email_verification_required");
+  }
+  return completeEnterpriseRegister({
+    challengeId: start.challengeId,
+    code: start.devCode,
+    companyName: input.companyName,
+    displayName: input.displayName,
+    email: input.email,
+    password: input.password,
+    billingEmail: input.email,
+    billingContactName: input.displayName,
+    payMode: "statement",
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+    correlationId: input.correlationId,
+  });
 }
 
 /** Admin cannot read old passwords — only issue a new temporary one (shown once). */
@@ -307,7 +448,10 @@ export async function updateOrganisation(input: {
   });
   if (!org) throw new Error("org_not_found");
 
-  if (input.status && !["active", "suspended"].includes(input.status)) {
+  if (
+    input.status &&
+    !["active", "suspended", "pending_review", "rejected"].includes(input.status)
+  ) {
     throw new Error("invalid_org_status");
   }
 
@@ -328,15 +472,23 @@ export async function updateOrganisation(input: {
     .where(eq(organisations.id, input.orgId))
     .returning();
 
+  const action =
+    input.status === "active" && org.status === "pending_review"
+      ? "ORG_APPROVED"
+      : input.status === "rejected"
+        ? "ORG_REJECTED"
+        : "ORG_UPDATED";
+
   await writeAuditEvent({
     actorType: "user",
     actorId: input.actorUserId,
-    action: "ORG_UPDATED",
+    action,
     subjectType: "organisation",
     subjectId: updated.id,
     correlationId: input.correlationId,
     payload: {
       status: updated.status,
+      previousStatus: org.status,
       billingEmail: updated.billingEmail,
     },
   });

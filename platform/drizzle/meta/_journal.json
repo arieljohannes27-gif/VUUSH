@@ -141,6 +141,13 @@
       "when": 1754521200000,
       "tag": "0019_wave2_finance",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1755620400000,
+      "tag": "0020_enterprise_onboarding",
+      "breakpoints": true
     }
   ]
 }
