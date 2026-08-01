@@ -123,6 +123,28 @@ function nextAction(state: string): { label: string; step: string } | null {
   }
 }
 
+function humanEligibility(status: string | null | undefined): string {
+  switch (status) {
+    case "eligible":
+      return "Ready for jobs";
+    case "pending":
+      return "Pending checks";
+    case "ineligible":
+      return "Not eligible yet";
+    case "suspended":
+      return "Suspended";
+    default:
+      return status ? status.replaceAll("_", " ") : "Pending checks";
+  }
+}
+
+const SOS_CONFIRM: Record<"medical" | "threat" | "accident" | "assault", string> = {
+  medical: "Call for medical help now?",
+  threat: "Report a threat and start help now?",
+  accident: "Report an accident and start help now?",
+  assault: "Report an assault and start help now?",
+};
+
 export default function App() {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -717,6 +739,7 @@ export default function App() {
     category: "medical" | "threat" | "accident" | "assault",
   ) {
     if (!token) return;
+    if (!window.confirm(SOS_CONFIRM[category])) return;
     await run(async () => {
       const gps = await readGps().catch(() => undefined);
       const res = await declareEmergency(token, category, undefined, gps);
@@ -903,10 +926,10 @@ export default function App() {
               <header className="onboard-progress">
                 <div className="onboard-progress-meta">
                   <span>Email confirmation</span>
-                  <span>Almost there</span>
+                  <span>Confirm email</span>
                 </div>
                 <div className="onboard-progress-track">
-                  <div className="onboard-progress-fill" style={{ width: "100%" }} />
+                  <div className="onboard-progress-fill" style={{ width: "90%" }} />
                 </div>
               </header>
               <div className="onboard-hero">
@@ -929,7 +952,9 @@ export default function App() {
                     autoFocus
                   />
                 </label>
-                {devCode && <p className="muted">Dev code: {devCode}</p>}
+                {import.meta.env.DEV && devCode && (
+                  <p className="muted">Dev code: {devCode}</p>
+                )}
                 <p className="trust-note">
                   After this, Admin reviews your documents before you can go on
                   duty.
@@ -1029,19 +1054,6 @@ export default function App() {
         <div className="topbar">
           <BrandLockup compact />
           <div className="topbar-actions">
-            <button
-              className="btn btn-ghost settings-btn"
-              type="button"
-              aria-label="Settings"
-              title="Settings"
-              onClick={() => {
-                setTab("settings");
-                void loadProfileSettings();
-              }}
-            >
-              <SettingsGearIcon />
-              <span>Settings</span>
-            </button>
             <button className="btn btn-ghost" type="button" onClick={signOut}>
               Sign out
             </button>
@@ -1050,72 +1062,6 @@ export default function App() {
 
         {tab === "home" && (
           <div className="stack">
-            <div className="duty-hero">
-              <div className="duty-hero-head">
-                {profile?.photoUrl ? (
-                  <img
-                    className="duty-avatar"
-                    src={profile.photoUrl}
-                    alt=""
-                    width={64}
-                    height={64}
-                  />
-                ) : (
-                  <div className="duty-avatar duty-avatar-fallback" aria-hidden>
-                    {(profile?.publicName || user.displayName || "?")
-                      .trim()
-                      .charAt(0)
-                      .toUpperCase()}
-                  </div>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h2 style={{ margin: 0 }}>
-                    {profile?.onDuty ? "On duty" : "Off duty"}
-                  </h2>
-                  <p className="muted" style={{ margin: "4px 0 0" }}>
-                    {profile?.publicName || user.displayName || "Driver"}
-                  </p>
-                </div>
-              </div>
-              <p>
-                {profile?.onDuty
-                  ? "Waiting for your next assignment."
-                  : "Go on duty when you’re ready to take jobs."}
-              </p>
-              <button className="btn btn-primary btn-block" disabled={busy || !profile} onClick={toggleDuty}>
-                {profile?.onDuty ? "Go off duty" : "Go on duty"}
-              </button>
-              <button
-                className="btn btn-secondary btn-block"
-                type="button"
-                style={{ marginTop: 8 }}
-                onClick={() => {
-                  void (async () => {
-                    await unlockOfferAudio();
-                    await startOfferAlert();
-                    setNotice(
-                      "Test ring for ~30s — Accept/Decline stops it on a real offer.",
-                    );
-                  })();
-                }}
-              >
-                Test offer sound
-              </button>
-            </div>
-
-            <div className="panel stack">
-              <div className="row" style={{ alignItems: "center" }}>
-                <h3 style={{ margin: 0, flex: 1 }}>Readiness</h3>
-                <span className={`status-pill ${profile?.eligibilityStatus === "eligible" ? "ok" : "warn"}`}>
-                  {profile?.eligibilityStatus ?? "pending"}
-                </span>
-              </div>
-              <p className="muted">
-                Vehicle {profile?.vehicleClass ?? "—"} · Zone {profile?.homeZoneCode ?? "—"}
-              </p>
-              <p className="muted mono">{user.email}</p>
-            </div>
-
             {assignment?.status === "offered" && job && (
               <div className="panel stack">
                 <span className="status-pill warn">New job offer</span>
@@ -1177,6 +1123,91 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            <div className="duty-hero">
+              <div className="duty-hero-head">
+                {profile?.photoUrl ? (
+                  <img
+                    className="duty-avatar"
+                    src={profile.photoUrl}
+                    alt=""
+                    width={64}
+                    height={64}
+                  />
+                ) : (
+                  <div className="duty-avatar duty-avatar-fallback" aria-hidden>
+                    {(profile?.publicName || user.displayName || "?")
+                      .trim()
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 style={{ margin: 0 }}>
+                    {profile?.onDuty ? "On duty" : "Off duty"}
+                  </h2>
+                  <p className="muted" style={{ margin: "4px 0 0" }}>
+                    {profile?.publicName || user.displayName || "Driver"}
+                  </p>
+                </div>
+              </div>
+              <p>
+                {profile?.onDuty
+                  ? "Waiting for your next assignment."
+                  : "Go on duty when you’re ready to take jobs."}
+              </p>
+              <button
+                className="btn btn-primary btn-block"
+                disabled={busy || !profile}
+                onClick={toggleDuty}
+              >
+                {!profile
+                  ? busy
+                    ? "Loading…"
+                    : "Go on duty"
+                  : profile.onDuty
+                    ? "Go off duty"
+                    : "Go on duty"}
+              </button>
+              {!profile && (
+                <p className="muted" style={{ margin: "8px 0 0" }}>
+                  {busy
+                    ? "Loading profile…"
+                    : "Duty is unavailable until your driver profile loads. Try signing out and back in if this stays."}
+                </p>
+              )}
+              {import.meta.env.DEV && (
+                <button
+                  className="btn btn-secondary btn-block"
+                  type="button"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    void (async () => {
+                      await unlockOfferAudio();
+                      await startOfferAlert();
+                      setNotice(
+                        "Test ring for ~30s — Accept/Decline stops it on a real offer.",
+                      );
+                    })();
+                  }}
+                >
+                  Test offer sound
+                </button>
+              )}
+            </div>
+
+            <div className="panel stack">
+              <div className="row" style={{ alignItems: "center" }}>
+                <h3 style={{ margin: 0, flex: 1 }}>Readiness</h3>
+                <span className={`status-pill ${profile?.eligibilityStatus === "eligible" ? "ok" : "warn"}`}>
+                  {humanEligibility(profile?.eligibilityStatus)}
+                </span>
+              </div>
+              <p className="muted">
+                Vehicle {profile?.vehicleClass ?? "—"} · Zone {profile?.homeZoneCode ?? "—"}
+              </p>
+              <p className="muted mono">{user.email}</p>
+            </div>
 
             {assignment?.status === "active" && job && (
               <div className="panel stack">
@@ -1809,14 +1840,6 @@ function DriverJobCockpit(props: {
           <h2 style={{ margin: 0, flex: 1 }}>{job.publicCode}</h2>
           <span className="status-pill">{job.state.replaceAll("_", " ")}</span>
         </div>
-        <a
-          className="btn btn-primary btn-block"
-          href={systemNavUrl(navTarget)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Navigate {navTarget.leg}
-        </a>
 
         <p className="address" style={{ margin: 0 }}>
           <strong>Pickup</strong>
@@ -1881,6 +1904,15 @@ function DriverJobCockpit(props: {
           </div>
         )}
 
+        <a
+          className="btn btn-secondary btn-block"
+          href={systemNavUrl(navTarget)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Navigate {navTarget.leg}
+        </a>
+
         {action && (
           <button
             className="btn btn-primary btn-block"
@@ -1895,36 +1927,27 @@ function DriverJobCockpit(props: {
         )}
 
         {["ARRIVED_DROPOFF", "IN_TRANSIT", "PICKED_UP"].includes(job.state) && (
-          <div className="stack">
-            <h3 style={{ marginBottom: 0 }}>Couldn’t deliver</h3>
-            <select
-              className="field"
-              value={failReason}
-              onChange={(e) => setFailReason(e.target.value)}
-            >
-              <option value="customer_unavailable">Customer unavailable</option>
-              <option value="wrong_address">Wrong address</option>
-              <option value="access_blocked">Access blocked</option>
-              <option value="refused">Refused</option>
-            </select>
-            <button className="btn btn-ghost btn-block" disabled={busy} onClick={onFail}>
-              Record failed attempt
-            </button>
-          </div>
+          <details className="fail-disclosure">
+            <summary>Couldn’t deliver</summary>
+            <div className="stack" style={{ marginTop: 12 }}>
+              <select
+                className="field"
+                value={failReason}
+                onChange={(e) => setFailReason(e.target.value)}
+              >
+                <option value="customer_unavailable">Customer unavailable</option>
+                <option value="wrong_address">Wrong address</option>
+                <option value="access_blocked">Access blocked</option>
+                <option value="refused">Refused</option>
+              </select>
+              <button className="btn btn-ghost btn-block" disabled={busy} onClick={onFail}>
+                Record failed attempt
+              </button>
+            </div>
+          </details>
         )}
       </div>
     </div>
-  );
-}
-
-function SettingsGearIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.77 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.69.22l2.39-.96c.5.39 1.04.7 1.63.94l.36 2.54c.05.24.26.42.5.42h3.84c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.26.12.55.02.69-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
-      />
-    </svg>
   );
 }
 

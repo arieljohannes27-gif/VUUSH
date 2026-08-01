@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   assignDevRole,
   closeBreakGlass,
@@ -136,6 +136,34 @@ function formatZar(cents: number) {
   return `R ${(cents / 100).toFixed(2)}`;
 }
 
+function humanAuthError(code: string) {
+  if (code === "Failed to fetch" || code.toLowerCase().includes("failed to fetch")) {
+    return "Could not reach the server. Check your connection and try again.";
+  }
+  const map: Record<string, string> = {
+    otp_failed: "Could not send a sign-in code. Try again.",
+    otp_email_not_configured:
+      "Sign-in email is not set up on the server yet.",
+    otp_sms_not_configured: "Phone sign-in is not available yet.",
+    otp_delivery_failed: "Could not deliver the sign-in code. Try again.",
+    invalid_code: "That code is wrong or expired.",
+    verify_failed: "Sign-in failed. Try again.",
+    unauthorized: "You are not allowed to sign in here.",
+    invalid_mfa_code: "That authenticator code is wrong. Try again.",
+    mfa_ticket_invalid: "This sign-in step expired. Start again.",
+    mfa_not_configured: "Authenticator is not set up. Ask an admin for help.",
+    mfa_incomplete: "Authenticator step did not finish.",
+    mfa_required: "Authenticator code required.",
+    mfa_enroll_required: "Set up authenticator to continue.",
+    mfa_required_or_incomplete: "Authenticator step did not finish.",
+    mfa_reset_retry: "Staff MFA reset. Send a new sign-in code.",
+    user_inactive: "This account is inactive.",
+  };
+  if (map[code]) return map[code];
+  if (code.startsWith("mfa_")) return code.replaceAll("_", " ");
+  return code.replaceAll("_", " ");
+}
+
 function driverLabel(input: {
   driverDisplayName?: string | null;
   driverEmail?: string | null;
@@ -188,7 +216,7 @@ async function finishStaffAuth(
 }
 
 function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => void }) {
-  const [email, setEmail] = useState("admin@vuush.local");
+  const [email, setEmail] = useState("");
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [devHint, setDevHint] = useState<string | null>(null);
@@ -207,7 +235,7 @@ function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => v
         setCode(res.devCode);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "otp_failed");
+      setError(humanAuthError(err instanceof Error ? err.message : "otp_failed"));
     } finally {
       setBusy(false);
     }
@@ -232,9 +260,9 @@ function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => v
         setChallengeId(null);
         setCode("");
         setDevHint(null);
-        setError("Staff MFA reset. Send a new sign-in code.");
+        setError(humanAuthError("mfa_reset_retry"));
       } else {
-        setError(message);
+        setError(humanAuthError(message));
       }
     } finally {
       setBusy(false);
@@ -279,11 +307,6 @@ function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => v
   );
 }
 
-function askReason(defaultCode = "admin_change") {
-  const reason = window.prompt("Reason code for this change", defaultCode);
-  return reason?.trim() || null;
-}
-
 function Console({
   token,
   user,
@@ -296,6 +319,26 @@ function Console({
   const [nav, setNav] = useState<Nav>("home");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const reasonWaitRef = useRef<((value: string | null) => void) | null>(null);
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [reasonValue, setReasonValue] = useState("");
+  const [reasonTitle, setReasonTitle] = useState("Reason for this change");
+
+  function askReason(defaultCode = "admin_change", title = "Reason for this change") {
+    setReasonTitle(title);
+    setReasonValue(defaultCode);
+    setReasonOpen(true);
+    return new Promise<string | null>((resolve) => {
+      reasonWaitRef.current = resolve;
+    });
+  }
+
+  function resolveReason(value: string | null) {
+    const resolve = reasonWaitRef.current;
+    reasonWaitRef.current = null;
+    setReasonOpen(false);
+    resolve?.(value);
+  }
   const [home, setHome] = useState<Awaited<ReturnType<typeof fetchAdminHome>> | null>(null);
   const [flags, setFlags] = useState<Awaited<ReturnType<typeof fetchFlags>>["flags"]>([]);
   const [zones, setZones] = useState<Awaited<ReturnType<typeof fetchZones>>["zones"]>([]);
@@ -583,6 +626,50 @@ function Console({
 
   return (
     <div className="app">
+      {reasonOpen ? (
+        <div className="reason-overlay" role="presentation">
+          <div
+            className="reason-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reason-dialog-title"
+          >
+            <h2 id="reason-dialog-title">{reasonTitle}</h2>
+            <input
+              className="field"
+              value={reasonValue}
+              onChange={(e) => setReasonValue(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  resolveReason(reasonValue.trim() || null);
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  resolveReason(null);
+                }
+              }}
+            />
+            <div className="reason-dialog-actions">
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => resolveReason(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => resolveReason(reasonValue.trim() || null)}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <header className="topbar">
         <div className="brand-row">
           <BrandLockup />
@@ -633,12 +720,16 @@ function Console({
           <div className="main-body">
           {error ? <div className="error banner">{error}</div> : null}
 
-          {nav === "home" && home ? (
+          {nav === "home" ? (
             <div className="stack">
               <header className="page-head">
                 <h1>Home</h1>
                 <p className="muted">How the city is configured right now.</p>
               </header>
+              {!home ? (
+                <p className="muted">Loading…</p>
+              ) : (
+                <>
               <dl className="stat-list">
                 <div>
                   <dt>Zones active</dt>
@@ -678,6 +769,8 @@ function Console({
                   </ul>
                 )}
               </section>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -742,7 +835,7 @@ function Console({
                 onSubmit={(e) => {
                   e.preventDefault();
                   void run(async () => {
-                    const reason = askReason("zone_create");
+                    const reason = await askReason("zone_create");
                     if (!reason) return;
                     await createZone(token, {
                       ...zoneForm,
@@ -800,7 +893,7 @@ function Console({
                           disabled={busy}
                           onClick={() =>
                             void run(async () => {
-                              const reason = askReason("zone_deactivate");
+                              const reason = await askReason("zone_deactivate");
                               if (!reason) return;
                               await patchZone(token, z.id, {
                                 code: z.code,
@@ -843,8 +936,8 @@ function Console({
                     <tr key={s.id}>
                       <td className="mono">{s.code}</td>
                       <td>{s.name}</td>
-                      <td>{s.baseFeeCents}</td>
-                      <td>{s.perKmFeeCents}</td>
+                      <td>{formatZar(s.baseFeeCents)}</td>
+                      <td>{formatZar(s.perKmFeeCents)}</td>
                       <td>{s.priorityMultiplier}</td>
                       <td>{s.active ? "yes" : "no"}</td>
                       <td>
@@ -854,7 +947,7 @@ function Console({
                           disabled={busy}
                           onClick={() =>
                             void run(async () => {
-                              const reason = askReason("service_toggle");
+                              const reason = await askReason("service_toggle");
                               if (!reason) return;
                               await patchServiceType(token, s.id, {
                                 ...s,
@@ -865,7 +958,7 @@ function Console({
                             })
                           }
                         >
-                          Toggle
+                          {s.active ? "Turn off" : "Turn on"}
                         </button>
                       </td>
                     </tr>
@@ -902,7 +995,7 @@ function Console({
                           disabled={busy}
                           onClick={() =>
                             void run(async () => {
-                              const reason = askReason("reason_toggle");
+                              const reason = await askReason("reason_toggle");
                               if (!reason) return;
                               await patchReasonCode(token, r.id, {
                                 code: r.code,
@@ -916,7 +1009,7 @@ function Console({
                             })
                           }
                         >
-                          Toggle
+                          {r.active ? "Turn off" : "Turn on"}
                         </button>
                       </td>
                     </tr>
@@ -1035,7 +1128,7 @@ function Console({
                 viewed).
               </p>
               {tempPasswordNotice ? (
-                <p className="error">{tempPasswordNotice}</p>
+                <p className="notice">{tempPasswordNotice}</p>
               ) : null}
 
               <div className="panel stack">
@@ -1314,7 +1407,7 @@ function Console({
                             disabled={busy}
                             onClick={() =>
                               void run(async () => {
-                                const reason = askReason("role_grant");
+                                const reason = await askReason("role_grant");
                                 if (!reason) return;
                                 await grantRole(token, s.id, "dispatcher", reason);
                                 await refresh();
@@ -1330,7 +1423,7 @@ function Console({
                             disabled={busy}
                             onClick={() =>
                               void run(async () => {
-                                const reason = askReason("role_revoke");
+                                const reason = await askReason("role_revoke");
                                 if (!reason) return;
                                 await revokeRole(token, s.id, "dispatcher", reason);
                                 await refresh();
@@ -1447,7 +1540,7 @@ function Console({
                           disabled={busy}
                           onClick={() =>
                             void run(async () => {
-                              const reason = askReason("goods_toggle");
+                              const reason = await askReason("goods_toggle");
                               if (!reason) return;
                               await patchProhibited(token, g.id, {
                                 label: g.label,
@@ -1459,7 +1552,7 @@ function Console({
                             })
                           }
                         >
-                          Toggle
+                          {g.active ? "Turn off" : "Turn on"}
                         </button>
                       </td>
                     </tr>
@@ -1528,9 +1621,9 @@ function Console({
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
-                    const reason = window.prompt(
-                      "Why are you opening emergency access?",
+                    const reason = await askReason(
                       "incident_review",
+                      "Why are you opening emergency access?",
                     );
                     if (!reason || reason.trim().length < 4) return;
                     await openBreakGlass(token, reason.trim());
@@ -1720,7 +1813,7 @@ function Console({
                   Refresh
                 </button>
               </form>
-              <table>
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Job</th>
@@ -1768,7 +1861,7 @@ function Console({
               <p className="muted">
                 Large Support refunds waiting for Finance approve or reject.
               </p>
-              <table>
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Job</th>
@@ -1854,7 +1947,7 @@ function Console({
                   Generate statement
                 </button>
               </form>
-              <table>
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Org</th>
@@ -1986,7 +2079,7 @@ function Console({
                   Add open item
                 </button>
               </form>
-              <table>
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Source</th>
@@ -2147,7 +2240,7 @@ function Console({
                   Create pack
                 </button>
               </form>
-              <table>
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Range</th>

@@ -42,6 +42,50 @@ const ACTIVE = new Set([
   "ARRIVED_DROPOFF",
 ]);
 
+const JOB_STATE_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  QUOTED: "Quoted",
+  CONFIRMED: "Confirmed",
+  ASSIGNED: "Driver assigned",
+  EN_ROUTE_PICKUP: "Heading to pickup",
+  ARRIVED_PICKUP: "At pickup",
+  PICKED_UP: "Picked up",
+  EN_ROUTE_DROPOFF: "On the way",
+  ARRIVED_DROPOFF: "Arriving",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+  FAILED: "Couldn’t complete",
+};
+
+function humanJobState(state: string): string {
+  if (JOB_STATE_LABELS[state]) return JOB_STATE_LABELS[state];
+  return state
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const INTEGRITY_LABELS: Record<string, string> = {
+  fresh: "Live",
+  ok: "Live",
+  stale: "Updating",
+  lost: "Signal lost",
+  absent: "Waiting for location",
+  degraded: "Location uncertain",
+  conflicted: "Checking location",
+};
+
+function humanIntegrity(integrity: string): string {
+  return INTEGRITY_LABELS[integrity] ?? integrity.replaceAll("_", " ");
+}
+
+const BOOK_STEP_LABELS: Record<BookStep, string> = {
+  route: "Step 1 of 4 · Where",
+  package: "Step 2 of 4 · Package",
+  quote: "Step 3 of 4 · Quote",
+  done: "Step 4 of 4 · Done",
+};
+
 function readStoredToken() {
   return localStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY_LEGACY);
 }
@@ -73,7 +117,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [email, setEmail] = useState("customer@vuush.local");
+  const [email, setEmail] = useState("");
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
@@ -254,6 +298,8 @@ export default function App() {
 
   async function openTrack(jobId: string) {
     setBooking(false);
+    setTrackJob(null);
+    setProjection(null);
     setTrackJobId(jobId);
     setTab("home");
   }
@@ -264,6 +310,8 @@ export default function App() {
       await cancelJob(token, trackJob.id);
       setNotice("Delivery cancelled.");
       setTrackJobId(null);
+      setTrackJob(null);
+      setProjection(null);
       await refreshJobs(token);
     });
   }
@@ -396,7 +444,9 @@ export default function App() {
               </button>
             </div>
 
-            {activeJobs.length > 0 && (
+            {activeJobs.length === 0 ? (
+              <p className="muted">No active deliveries.</p>
+            ) : (
               <div className="stack">
                 <h3>Active</h3>
                 <ul className="list">
@@ -407,7 +457,7 @@ export default function App() {
                           <strong>{job.publicCode}</strong>
                           <div className="muted">{job.dropoffAddress}</div>
                         </div>
-                        <span className="status-pill">{job.state.replaceAll("_", " ")}</span>
+                        <span className="status-pill">{humanJobState(job.state)}</span>
                       </button>
                     </li>
                   ))}
@@ -419,11 +469,16 @@ export default function App() {
 
         {tab === "home" && booking && (
           <div className="stack">
-            <div className="steps" aria-hidden>
-              <span className="on" />
-              <span className={["package", "quote", "done"].includes(bookStep) ? "on" : ""} />
-              <span className={["quote", "done"].includes(bookStep) ? "on" : ""} />
-              <span className={bookStep === "done" ? "on" : ""} />
+            <div>
+              <div className="steps" aria-hidden>
+                <span className="on" />
+                <span className={["package", "quote", "done"].includes(bookStep) ? "on" : ""} />
+                <span className={["quote", "done"].includes(bookStep) ? "on" : ""} />
+                <span className={bookStep === "done" ? "on" : ""} />
+              </div>
+              <p className="muted" style={{ margin: "8px 0 0" }}>
+                {BOOK_STEP_LABELS[bookStep]}
+              </p>
             </div>
 
             {bookStep === "route" && (
@@ -438,7 +493,7 @@ export default function App() {
                   <select className="field" value={pickupZone} onChange={(e) => setPickupZone(e.target.value)}>
                     {zones.map((z) => (
                       <option key={z.code} value={z.code}>
-                        {z.name} ({z.code})
+                        {z.name}
                       </option>
                     ))}
                   </select>
@@ -452,7 +507,7 @@ export default function App() {
                   <select className="field" value={dropoffZone} onChange={(e) => setDropoffZone(e.target.value)}>
                     {zones.map((z) => (
                       <option key={z.code} value={z.code}>
-                        {z.name} ({z.code})
+                        {z.name}
                       </option>
                     ))}
                   </select>
@@ -514,7 +569,7 @@ export default function App() {
                   <strong>Dropoff</strong>
                   {draftJob.dropoffAddress}
                 </p>
-                <p className="muted">Pay on confirm (dev card stub — no card numbers stored).</p>
+                <p className="muted">You’ll confirm and pay on this step.</p>
                 <div className="row">
                   <button className="btn btn-ghost" onClick={() => setBookStep("package")}>
                     Back
@@ -548,6 +603,21 @@ export default function App() {
           </div>
         )}
 
+        {tab === "home" && trackJobId && !trackJob && (
+          <div className="panel stack">
+            <p className="muted" style={{ margin: 0 }}>
+              Loading delivery…
+            </p>
+            <button className="btn btn-ghost" type="button" onClick={() => {
+              setTrackJobId(null);
+              setTrackJob(null);
+              setProjection(null);
+            }}>
+              Back
+            </button>
+          </div>
+        )}
+
         {tab === "home" && trackJobId && trackJob && token && (
           <TrackStage
             token={token}
@@ -559,7 +629,11 @@ export default function App() {
             mutationZone={mutationZone}
             setMutationAddress={setMutationAddress}
             setMutationZone={setMutationZone}
-            onBack={() => setTrackJobId(null)}
+            onBack={() => {
+              setTrackJobId(null);
+              setTrackJob(null);
+              setProjection(null);
+            }}
             onMutation={handleMutation}
             onCancel={handleCancel}
           />
@@ -581,12 +655,12 @@ export default function App() {
                         <strong>{job.publicCode}</strong>
                         <div className="muted">{job.dropoffAddress}</div>
                       </div>
-                      <span className="status-pill">{job.state.replaceAll("_", " ")}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                        <span className="status-pill">{humanJobState(job.state)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
           </div>
         )}
 
@@ -710,7 +784,9 @@ export default function App() {
             <div className="panel stack">
               <h2>Profile</h2>
               <p className="mono">{user.email}</p>
-              <p className="muted">Customer account · beachhead Wave-1</p>
+              <button className="btn btn-secondary btn-block" type="button" onClick={signOut}>
+                Sign out
+              </button>
             </div>
           </div>
         )}
@@ -720,9 +796,12 @@ export default function App() {
         <button
           className={tab === "home" ? "active" : ""}
           onClick={() => {
+            if (booking && !window.confirm("Leave this booking?")) return;
             setTab("home");
             setBooking(false);
             setTrackJobId(null);
+            setTrackJob(null);
+            setProjection(null);
           }}
         >
           Home
@@ -784,6 +863,7 @@ function TrackStage(props: {
   } = props;
 
   const [driver, setDriver] = useState<DriverProfessional | null>(null);
+  const [changeDestOpen, setChangeDestOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -874,7 +954,7 @@ function TrackStage(props: {
       <div className={`track-sheet panel stack${warn ? " banner-warn" : ""}`}>
         <div className="row" style={{ alignItems: "center" }}>
           <h2 style={{ margin: 0, flex: 1 }}>{job.publicCode}</h2>
-          <span className="status-pill">{job.state.replaceAll("_", " ")}</span>
+          <span className="status-pill">{humanJobState(job.state)}</span>
         </div>
         {projection && (
           <>
@@ -887,7 +967,7 @@ function TrackStage(props: {
                     : "warn"
               }`}
             >
-              {projection.integrityClass}
+              {humanIntegrity(projection.integrityClass)}
             </span>
             <p style={{ margin: 0 }}>{projection.customerMessage}</p>
           </>
@@ -918,27 +998,37 @@ function TrackStage(props: {
 
         {ACTIVE.has(job.state) && (
           <div className="stack">
-            <h3 style={{ marginBottom: 0 }}>Change destination</h3>
-            <input
-              className="field"
-              placeholder="New dropoff address"
-              value={mutationAddress}
-              onChange={(e) => setMutationAddress(e.target.value)}
-            />
-            <select
-              className="field"
-              value={mutationZone}
-              onChange={(e) => setMutationZone(e.target.value)}
+            <button
+              className="btn btn-secondary btn-block"
+              type="button"
+              onClick={() => setChangeDestOpen((o) => !o)}
             >
-              {zones.map((z) => (
-                <option key={z.code} value={z.code}>
-                  {z.code}
-                </option>
-              ))}
-            </select>
-            <button className="btn btn-secondary btn-block" disabled={busy} onClick={onMutation}>
-              Request change
+              Change destination
             </button>
+            {changeDestOpen && (
+              <>
+                <input
+                  className="field"
+                  placeholder="New dropoff address"
+                  value={mutationAddress}
+                  onChange={(e) => setMutationAddress(e.target.value)}
+                />
+                <select
+                  className="field"
+                  value={mutationZone}
+                  onChange={(e) => setMutationZone(e.target.value)}
+                >
+                  {zones.map((z) => (
+                    <option key={z.code} value={z.code}>
+                      {z.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-secondary btn-block" disabled={busy} onClick={onMutation}>
+                  Request change
+                </button>
+              </>
+            )}
           </div>
         )}
 

@@ -270,6 +270,47 @@ button {
   font-size: 12px;
 }
 
+.panel {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+.field {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.field:focus {
+  outline: 2px solid var(--swift-blue);
+  outline-offset: 1px;
+  border-color: var(--swift-blue);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row > * {
+  flex: 1;
+}
+
 /* Plain stacked stats — not cards */
 .stat-list {
   margin: 0;
@@ -392,6 +433,31 @@ button {
 .btn-ghost:hover {
   color: var(--color-text-primary);
   background: rgba(0, 0, 0, 0.06);
+}
+
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-weight: 550;
+  font-size: 13px;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.ghost:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-danger {
@@ -647,12 +713,59 @@ button.linkish {
   color: var(--swift-danger);
 }
 
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--swift-success-soft);
+  background: var(--swift-success-soft);
+  color: var(--swift-success);
+  font-size: 14px;
+}
+
 .banner {
   padding: 0 0 12px;
   background: transparent;
   border-radius: 0;
   margin-bottom: 0;
   border-bottom: 1px solid var(--swift-danger-soft);
+}
+
+.reason-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.reason-dialog {
+  width: min(400px, 100%);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.reason-dialog h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--color-text-primary);
+}
+
+.reason-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .warn-copy {

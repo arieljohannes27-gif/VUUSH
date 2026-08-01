@@ -40,27 +40,27 @@ const STEP_META: Array<{
   {
     title: "Your details",
     support: "A few facts so we can create your driver account.",
-    continueLabel: "Continue to ID documents",
+    continueLabel: "Continue",
   },
   {
     title: "ID & licence",
     support: "Clear scans help us verify you faster.",
-    continueLabel: "Continue to your photo",
+    continueLabel: "Continue",
   },
   {
     title: "Your photo",
     support: "A live selfie confirms it’s you — not an old gallery shot.",
-    continueLabel: "Continue to vehicle details",
+    continueLabel: "Continue",
   },
   {
     title: "Your vehicle",
     support: "Plate and a live photo of the vehicle you’ll drive.",
-    continueLabel: "Continue to insurance",
+    continueLabel: "Continue",
   },
   {
     title: "Insurance",
     support: "Vehicle cover and goods cover (minimum R100 000).",
-    continueLabel: "Continue to clearance",
+    continueLabel: "Continue",
   },
   {
     title: "Police clearance",
@@ -124,7 +124,6 @@ export function SignupOnboarding({
           <span>
             Step {step} of {SIGNUP_STEPS}
           </span>
-          <span>{Math.round(progress)}%</span>
         </div>
         <div
           className="onboard-progress-track"

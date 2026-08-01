@@ -151,11 +151,9 @@ button {
   color: var(--color-text-secondary);
 }
 
-.topbar-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  font-size: var(--font-small-size);
+.topbar-meta .btn-quiet {
+  min-height: 36px;
+  padding: 0 8px;
   color: var(--color-text-secondary);
 }
 
@@ -553,6 +551,24 @@ button {
   width: 100%;
 }
 
+.inspector-primary-actions .btn-assign-direct {
+  justify-self: start;
+  width: auto;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8a3b2e;
+  border-color: rgba(196, 92, 74, 0.35);
+  background: transparent;
+}
+
+.inspector-primary-actions .btn-assign-direct:hover:not(:disabled) {
+  color: #6e2e24;
+  border-color: rgba(196, 92, 74, 0.55);
+  background: #faf6f4;
+}
+
 .inspector-primary-actions .btn-quiet {
   justify-self: start;
   min-height: 36px;
@@ -767,6 +783,16 @@ button {
 
 .city-hud-pill--attention {
   border-color: rgba(240, 199, 195, 0.9);
+}
+
+.city-hud-pill--compact {
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+}
+
+.city-hud-pill--compact .city-hud-title {
+  font-size: 13px;
 }
 
 .city-hud-pill--open {
@@ -1264,6 +1290,12 @@ button {
 
 .mfa-otpauth {
   margin-top: var(--space-xs);
+}
+
+.mfa-otpauth-copy {
+  justify-self: start;
+  min-height: 36px;
+  width: auto;
 }
 
 

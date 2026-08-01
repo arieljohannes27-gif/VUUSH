@@ -128,6 +128,30 @@ function humanPayment(status: string) {
   return map[status] ?? status.replaceAll("_", " ");
 }
 
+/** Short queue line for payment; null means ready — omit from the secondary line. */
+function queuePaymentHint(paymentStatus: string): string | null {
+  if (
+    paymentReadyForOffer(paymentStatus) ||
+    paymentStatus === "succeeded" ||
+    paymentStatus === "paid"
+  ) {
+    return null;
+  }
+  const map: Record<string, string> = {
+    unauthorized: "Payment needed",
+    pending: "Payment pending",
+    failed: "Payment failed",
+  };
+  return map[paymentStatus] ?? paymentStatus.replaceAll("_", " ");
+}
+
+const OVERRIDE_REASONS: Array<{ code: string; label: string }> = [
+  { code: "ops_override", label: "Ops override" },
+  { code: "reassign_capacity", label: "Capacity reassign" },
+  { code: "backup_custody", label: "Backup custody" },
+  { code: "DISPATCH_HOLD", label: "Dispatch hold" },
+];
+
 type InspectorTone = "ready" | "blocked" | "hold" | "assigned" | "neutral";
 
 function inspectorSituation(detail: {
@@ -332,10 +356,17 @@ function Login({
                   </p>
                 ) : null}
                 {totpOtpauth ? (
-                  <p className="hint mfa-otpauth">
-                    Or paste this into your app:{" "}
-                    <span className="mono-break">{totpOtpauth}</span>
-                  </p>
+                  <button
+                    className="btn btn-ghost mfa-otpauth-copy"
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(totpOtpauth).catch(
+                        () => undefined,
+                      );
+                    }}
+                  >
+                    Copy setup link
+                  </button>
                 ) : null}
               </div>
             ) : (
@@ -459,7 +490,7 @@ function Board({
     Array<Driver & { zoneMatch: boolean }>
   >([]);
   const [driverId, setDriverId] = useState("");
-  const [reason, setReason] = useState("ops_override");
+  const [reason, setReason] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [actionBusy, setActionBusy] = useState(false);
@@ -657,10 +688,10 @@ function Board({
               detailRailRef.current?.scrollTo(0, 0);
             }}
           >
-            Home
+            Clear job
           </button>
           <button
-            className="btn btn-ghost"
+            className="btn btn-quiet"
             type="button"
             onClick={() => void refresh()}
           >
@@ -678,47 +709,54 @@ function Board({
             <h2>Queue</h2>
             <p>
               {queue.length === 0
-                ? "Nothing waiting — when jobs confirm, they appear here."
+                ? "Waiting for requests"
                 : `${queue.length} waiting for assignment`}
             </p>
           </div>
-          <ul className="list">
-            {queue.map((item) => (
-              <li key={item.job.id}>
-                <button
-                  type="button"
-                  className={`list-row${selectedId === item.job.id ? " active" : ""}`}
-                  onMouseDown={(e) => {
-                    // Prevent focus scroll from shoving the board under the map
-                    e.preventDefault();
-                  }}
-                  onClick={() => {
-                    window.scrollTo(0, 0);
-                    setOpsOpen(false);
-                    setSelectedId(item.job.id);
-                    requestAnimationFrame(() => {
-                      detailRailRef.current?.scrollTo(0, 0);
-                    });
-                  }}
-                >
-                  <div className="list-primary">
-                    <span
-                      className={`pip ${item.onHold ? "danger" : "signal"}`}
-                      aria-hidden
-                    />
-                    {item.job.publicCode}
-                  </div>
-                  <div className="list-secondary">
-                    {item.job.pickupZoneCode} → {item.job.dropoffZoneCode}
-                    {item.onHold ? " · on hold" : ""}
-                    {!paymentReadyForOffer(item.job.paymentStatus)
-                      ? ` · ${item.job.paymentStatus}`
-                      : ""}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {queue.length === 0 ? (
+            <p className="empty">
+              No jobs waiting — new requests appear here.
+            </p>
+          ) : (
+            <ul className="list">
+              {queue.map((item) => {
+                const payHint = queuePaymentHint(item.job.paymentStatus);
+                return (
+                  <li key={item.job.id}>
+                    <button
+                      type="button"
+                      className={`list-row${selectedId === item.job.id ? " active" : ""}`}
+                      onMouseDown={(e) => {
+                        // Prevent focus scroll from shoving the board under the map
+                        e.preventDefault();
+                      }}
+                      onClick={() => {
+                        window.scrollTo(0, 0);
+                        setOpsOpen(false);
+                        setSelectedId(item.job.id);
+                        requestAnimationFrame(() => {
+                          detailRailRef.current?.scrollTo(0, 0);
+                        });
+                      }}
+                    >
+                      <div className="list-primary">
+                        <span
+                          className={`pip ${item.onHold ? "danger" : "signal"}`}
+                          aria-hidden
+                        />
+                        {item.job.publicCode}
+                      </div>
+                      <div className="list-secondary">
+                        {item.job.pickupZoneCode} → {item.job.dropoffZoneCode}
+                        {item.onHold ? " · on hold" : ""}
+                        {payHint ? ` · ${payHint}` : ""}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <section className="stage" aria-label="City overview">
@@ -726,63 +764,81 @@ function Board({
             <SwiftMap className="dispatch-map" markers={boardMarkers} interactive />
           </div>
 
-          {!selectedId ? (
+          {!selectedId || attentionCount > 0 ? (
             <div className="city-hud" aria-label="City health">
-              <button
-                type="button"
-                className={`city-hud-pill${cityHealthy ? "" : " city-hud-pill--attention"}${opsOpen ? " city-hud-pill--open" : ""}`}
-                aria-expanded={opsOpen}
-                onClick={() => setOpsOpen((open) => !open)}
-              >
-                <span
-                  className={`city-hud-dot${cityHealthy ? " city-hud-dot--ok" : " city-hud-dot--alert"}`}
-                  aria-hidden
-                />
-                <span className="city-hud-copy">
+              {!selectedId ? (
+                <button
+                  type="button"
+                  className={`city-hud-pill${cityHealthy ? "" : " city-hud-pill--attention"}${opsOpen ? " city-hud-pill--open" : ""}`}
+                  aria-expanded={opsOpen}
+                  onClick={() => setOpsOpen((open) => !open)}
+                >
+                  <span
+                    className={`city-hud-dot${cityHealthy ? " city-hud-dot--ok" : " city-hud-dot--alert"}`}
+                    aria-hidden
+                  />
+                  <span className="city-hud-copy">
+                    <span className="city-hud-title">
+                      {cityHealthy
+                        ? "City healthy"
+                        : `${attentionCount} need${attentionCount === 1 ? "s" : ""} attention`}
+                    </span>
+                    <span className="city-hud-meta">
+                      {onDutyCount} on duty · {liveSessionCount} live
+                      {positions.length > 0 &&
+                      liveSessionCount !== positions.length
+                        ? ` · ${positions.length} tracked`
+                        : ""}
+                      {queue.length > 0 ? ` · ${queue.length} in queue` : ""}
+                    </span>
+                  </span>
+                  <span className="city-hud-chevron" aria-hidden>
+                    {opsOpen ? "Close" : "Details"}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`city-hud-pill city-hud-pill--compact city-hud-pill--attention${opsOpen ? " city-hud-pill--open" : ""}`}
+                  aria-expanded={opsOpen}
+                  onClick={() => setOpsOpen((open) => !open)}
+                >
+                  <span className="city-hud-dot city-hud-dot--alert" aria-hidden />
                   <span className="city-hud-title">
-                    {cityHealthy
-                      ? "City healthy"
-                      : `${attentionCount} need${attentionCount === 1 ? "s" : ""} attention`}
+                    {attentionCount} need{attentionCount === 1 ? "s" : ""}{" "}
+                    attention
                   </span>
-                  <span className="city-hud-meta">
-                    {onDutyCount} on duty · {liveSessionCount} live
-                    {positions.length > 0 && liveSessionCount !== positions.length
-                      ? ` · ${positions.length} tracked`
-                      : ""}
-                    {queue.length > 0 ? ` · ${queue.length} in queue` : ""}
-                  </span>
-                </span>
-                <span className="city-hud-chevron" aria-hidden>
-                  {opsOpen ? "Close" : "Details"}
-                </span>
-              </button>
+                </button>
+              )}
 
               {opsOpen ? (
                 <div className="city-ops" role="region" aria-label="Operations detail">
-                  <div className="city-ops-section">
-                    <p className="city-ops-kicker">Fleet</p>
-                    <div className="city-ops-metrics">
-                      <div>
-                        <span>On duty</span>
-                        <strong>{onDutyCount}</strong>
+                  {!selectedId ? (
+                    <div className="city-ops-section">
+                      <p className="city-ops-kicker">Fleet</p>
+                      <div className="city-ops-metrics">
+                        <div>
+                          <span>On duty</span>
+                          <strong>{onDutyCount}</strong>
+                        </div>
+                        <div>
+                          <span>Live</span>
+                          <strong>{liveSessionCount}</strong>
+                        </div>
+                        <div>
+                          <span>Tracked</span>
+                          <strong>{positions.length}</strong>
+                        </div>
+                        <div>
+                          <span>Queue</span>
+                          <strong>{queue.length}</strong>
+                        </div>
                       </div>
-                      <div>
-                        <span>Live</span>
-                        <strong>{liveSessionCount}</strong>
-                      </div>
-                      <div>
-                        <span>Tracked</span>
-                        <strong>{positions.length}</strong>
-                      </div>
-                      <div>
-                        <span>Queue</span>
-                        <strong>{queue.length}</strong>
-                      </div>
+                      <p className="city-ops-note">
+                        Markers come from real driver signals only — never invented motion.
+                      </p>
                     </div>
-                    <p className="city-ops-note">
-                      Markers come from real driver signals only — never invented motion.
-                    </p>
-                  </div>
+                  ) : null}
 
                   {lostTasks.length > 0 ? (
                     <div className="city-ops-section">
@@ -1156,9 +1212,10 @@ function Board({
                         {actionBusy ? "Sending…" : "Send offer"}
                       </button>
                       <button
-                        className="btn btn-quiet"
+                        className="btn btn-ghost btn-assign-direct"
                         type="button"
                         disabled={actionBusy || !canOffer}
+                        title="Assigns the driver immediately without an offer"
                         onClick={() =>
                           void run(
                             () =>
@@ -1180,18 +1237,29 @@ function Board({
                   <section className="inspector-section inspector-section--muted" aria-label="More actions">
                     <h3 className="inspector-section-title">More</h3>
                     <div className="field field-quiet">
-                      <label htmlFor="reason">Reason</label>
-                      <input
+                      <label htmlFor="reason">Reason (required)</label>
+                      <select
                         id="reason"
+                        className="inspector-select"
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
-                      />
+                        required
+                      >
+                        <option value="">Select a reason…</option>
+                        {OVERRIDE_REASONS.map((r) => (
+                          <option key={r.code} value={r.code}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="inspector-tertiary-actions">
                       <button
                         className="btn btn-quiet"
                         type="button"
-                        disabled={!driverId || Boolean(detail.holds[0])}
+                        disabled={
+                          !driverId || !reason || Boolean(detail.holds[0])
+                        }
                         onClick={() =>
                           void run(
                             () =>
@@ -1210,7 +1278,9 @@ function Board({
                       <button
                         className="btn btn-quiet"
                         type="button"
-                        disabled={!driverId || Boolean(detail.holds[0])}
+                        disabled={
+                          !driverId || !reason || Boolean(detail.holds[0])
+                        }
                         onClick={() =>
                           void run(
                             () =>
@@ -1229,6 +1299,7 @@ function Board({
                       <button
                         className="btn btn-quiet"
                         type="button"
+                        disabled={!reason}
                         onClick={() =>
                           void run(
                             () => placeHold(token, selected.job.id, reason),
