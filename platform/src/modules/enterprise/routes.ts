@@ -27,9 +27,8 @@ import {
   listOrgSites,
   listPendingApprovalJobs,
   revokeOrgApiKey,
-  completeEnterpriseRegister,
   startEnterpriseRegister,
-  signupEnterprise,
+  completeEnterpriseRegister,
   suburbSortStops,
   updateOrganisation,
   updateOrgSite,
@@ -282,7 +281,7 @@ export async function enterpriseRoutes(app: FastifyInstance) {
     },
   );
 
-  /* —— Public signup (email verify once → password → auto-approve) —— */
+  /* —— Enterprise application (verify email once → Admin approve) —— */
 
   await app.register(async (scoped) => {
     await scoped.register(import("@fastify/rate-limit"), {
@@ -321,7 +320,7 @@ export async function enterpriseRoutes(app: FastifyInstance) {
           companyName: z.string().min(2).max(200),
           displayName: z.string().min(2).max(200),
           email: z.string().email(),
-          password: z.string().min(8).max(200),
+          password: z.string().min(12).max(200),
           billingEmail: z.string().email(),
           billingContactName: z.string().min(2).max(200).optional(),
           payMode: z.enum(["statement", "card"]).optional(),
@@ -348,30 +347,9 @@ export async function enterpriseRoutes(app: FastifyInstance) {
       }
     });
 
-    scoped.post("/v1/enterprise/signup", async (request, reply) => {
-      const parsed = z
-        .object({
-          companyName: z.string().min(2).max(200),
-          displayName: z.string().min(2).max(200),
-          email: z.string().email(),
-          password: z.string().min(8).max(200),
-        })
-        .safeParse(request.body);
-      if (!parsed.success) {
-        return reply.status(400).send({ error: "validation_error" });
-      }
-      try {
-        const result = await signupEnterprise({
-          ...parsed.data,
-          ipAddress: request.ip,
-          userAgent: request.headers["user-agent"],
-          correlationId: request.id,
-        });
-        return reply.status(201).send(result);
-      } catch (err) {
-        const mapped = mapError(err);
-        return reply.status(mapped.status).send({ error: mapped.error });
-      }
+    // Legacy path closed — use register/start + complete.
+    scoped.post("/v1/enterprise/signup", async (_request, reply) => {
+      return reply.status(403).send({ error: "enterprise_invite_only" });
     });
   });
 

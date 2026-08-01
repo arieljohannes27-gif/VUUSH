@@ -23,6 +23,8 @@ import {
   fetchJobProofs,
   fetchMe,
   loginPassword,
+  startPasswordReset,
+  completePasswordReset,
   pingSignal,
   readGps,
   rejectAssignment,
@@ -48,7 +50,7 @@ import {
 } from "./SignupOnboarding";
 
 type Tab = "home" | "job" | "earnings" | "emergency" | "settings";
-type AuthView = "landing" | "signup" | "signin" | "verify";
+type AuthView = "landing" | "signup" | "signin" | "verify" | "forgot";
 
 const TOKEN_KEY = "vuush.driver.token";
 const TOKEN_KEY_LEGACY = "swift.driver.token";
@@ -873,13 +875,13 @@ export default function App() {
               </div>
               <div className="onboard-body stack">
                 <label className="field-block">
-                  <span className="label">Email</span>
+                  <span className="label">Email or phone</span>
                   <input
                     id="email2"
                     className="field"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
+                    autoComplete="username"
                   />
                 </label>
                 <label className="field-block">
@@ -893,6 +895,13 @@ export default function App() {
                     autoComplete="current-password"
                   />
                 </label>
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => setAuthView("forgot")}
+                >
+                  Forgot password?
+                </button>
               </div>
               <footer className="onboard-footer">
                 <button
@@ -916,6 +925,94 @@ export default function App() {
                   onClick={() => setAuthView("landing")}
                 >
                   Back
+                </button>
+              </footer>
+            </div>
+          )}
+
+          {authView === "forgot" && (
+            <div className="onboard">
+              <div className="onboard-hero">
+                <h2 className="onboard-title">Reset password</h2>
+                <p className="onboard-support">
+                  We email a code so you can choose a new password and keep
+                  driving.
+                </p>
+              </div>
+              <div className="onboard-body stack">
+                <label className="field-block">
+                  <span className="label">Email or phone</span>
+                  <input
+                    className="field"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="username"
+                  />
+                </label>
+                {challengeId ? (
+                  <>
+                    <label className="field-block">
+                      <span className="label">Code</span>
+                      <input
+                        className="field"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                      />
+                    </label>
+                    {devCode ? (
+                      <p className="muted">Dev code: {devCode}</p>
+                    ) : null}
+                    <label className="field-block">
+                      <span className="label">New password (12+)</span>
+                      <input
+                        className="field"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        minLength={12}
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+              <footer className="onboard-footer">
+                <button
+                  className="btn btn-primary btn-block"
+                  disabled={busy}
+                  type="button"
+                  onClick={() =>
+                    void run(async () => {
+                      if (!challengeId) {
+                        const res = await startPasswordReset(email.trim());
+                        setChallengeId(res.challengeId ?? "pending");
+                        if (res.devCode) {
+                          setDevCode(res.devCode);
+                          setOtp(res.devCode);
+                        }
+                        return;
+                      }
+                      await completePasswordReset({
+                        challengeId,
+                        code: otp.trim(),
+                        newPassword: password,
+                      });
+                      setAuthView("signin");
+                      setChallengeId(null);
+                      setPassword("");
+                    })
+                  }
+                >
+                  {challengeId ? "Save new password" : "Send reset code"}
+                </button>
+                <button
+                  className="btn btn-ghost btn-block"
+                  type="button"
+                  onClick={() => {
+                    setAuthView("signin");
+                    setChallengeId(null);
+                  }}
+                >
+                  Back to sign in
                 </button>
               </footer>
             </div>

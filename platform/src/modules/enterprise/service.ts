@@ -16,6 +16,8 @@ import {
 } from "../../db/schema.js";
 import { writeAuditEvent } from "../audit/service.js";
 import { hashPassword } from "../identity/crypto.js";
+import { assertPasswordPolicy } from "../../shared/auth/password-policy.js";
+import { sendAppEmail } from "../identity/otp-delivery.js";
 import { emailLookupCandidates } from "../identity/email-aliases.js";
 import {
   assignRole,
@@ -182,7 +184,8 @@ export async function completeEnterpriseRegister(input: {
   if (displayName.length < 2) throw new Error("display_name_required");
   if (!email.includes("@")) throw new Error("invalid_email");
   if (!billingEmail.includes("@")) throw new Error("billing_email_required");
-  if (input.password.length < 8) throw new Error("password_too_short");
+  if (input.password.length < 1) throw new Error("password_too_short");
+  assertPasswordPolicy(input.password);
   if (payMode !== "statement" && payMode !== "card") {
     throw new Error("pay_mode_invalid");
   }
@@ -367,7 +370,7 @@ export async function adminResetOrgMemberPassword(input: {
   });
   if (!user) throw new Error("user_not_found");
 
-  const temporaryPassword = `Vuush-${randomBytes(5).toString("hex")}`;
+  const temporaryPassword = `Vuush-${randomBytes(6).toString("hex")}!A1`;
   await db
     .update(users)
     .set({
@@ -492,6 +495,25 @@ export async function updateOrganisation(input: {
       billingEmail: updated.billingEmail,
     },
   });
+
+  if (action === "ORG_APPROVED") {
+    const members = await listOrgMembers(updated.id);
+    const notifyEmails = new Set<string>();
+    if (updated.billingEmail) notifyEmails.add(updated.billingEmail);
+    for (const m of members) {
+      if (m.email) notifyEmails.add(m.email);
+    }
+    const portal =
+      process.env.ENTERPRISE_PORTAL_URL?.trim() ||
+      "https://vuush-enterprise.vercel.app";
+    for (const to of notifyEmails) {
+      await sendAppEmail({
+        to,
+        subject: "Your VUUSH Enterprise account is approved",
+        text: `Good news — ${updated.name} is approved on VUUSH Enterprise.\n\nYou can sign in with your work email and password at:\n${portal}\n\nIf you forgot your password, use Forgot password on the sign-in page.`,
+      });
+    }
+  }
 
   return updated;
 }

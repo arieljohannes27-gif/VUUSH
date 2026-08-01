@@ -75,7 +75,7 @@ function stepComplete(step: number, d: SignupDraft): boolean {
       return (
         d.displayName.trim().length > 1 &&
         d.email.trim().includes("@") &&
-        d.password.length >= 8 &&
+        d.password.length >= 12 &&
         d.passwordConfirm === d.password
       );
     case 2:

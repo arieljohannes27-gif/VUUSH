@@ -54,7 +54,7 @@ import {
   patchServiceType,
   patchZone,
   requestOtp,
-  resetStaffMfa,
+  loginWithPassword,
   revokeRole,
   verifyMfa,
   verifyOtp,
@@ -65,12 +65,8 @@ import {
   type PayoutItem,
   type SessionUser,
 } from "./api";
-import {
-  clearTotpSecret,
-  generateTotp,
-  readTotpSecret,
-  writeTotpSecret,
-} from "./totp";
+import { humanAuthError as sharedAuthMessage } from "../../../src/shared/auth/messages";
+import { writeTotpSecret } from "./totp";
 
 const TOKEN_KEY = "vuush.admin.token";
 const TOKEN_KEY_LEGACY = "swift.admin.token";
@@ -140,28 +136,7 @@ function humanAuthError(code: string) {
   if (code === "Failed to fetch" || code.toLowerCase().includes("failed to fetch")) {
     return "Could not reach the server. Check your connection and try again.";
   }
-  const map: Record<string, string> = {
-    otp_failed: "Could not send a sign-in code. Try again.",
-    otp_email_not_configured:
-      "Sign-in email is not set up on the server yet.",
-    otp_sms_not_configured: "Phone sign-in is not available yet.",
-    otp_delivery_failed: "Could not deliver the sign-in code. Try again.",
-    invalid_code: "That code is wrong or expired.",
-    verify_failed: "Sign-in failed. Try again.",
-    unauthorized: "You are not allowed to sign in here.",
-    invalid_mfa_code: "That authenticator code is wrong. Try again.",
-    mfa_ticket_invalid: "This sign-in step expired. Start again.",
-    mfa_not_configured: "Authenticator is not set up. Ask an admin for help.",
-    mfa_incomplete: "Authenticator step did not finish.",
-    mfa_required: "Authenticator code required.",
-    mfa_enroll_required: "Set up authenticator to continue.",
-    mfa_required_or_incomplete: "Authenticator step did not finish.",
-    mfa_reset_retry: "Staff MFA reset. Send a new sign-in code.",
-    user_inactive: "This account is inactive.",
-  };
-  if (map[code]) return map[code];
-  if (code.startsWith("mfa_")) return code.replaceAll("_", " ");
-  return code.replaceAll("_", " ");
+  return sharedAuthMessage(code);
 }
 
 function driverLabel(input: {
@@ -175,10 +150,20 @@ function driverLabel(input: {
   return "Unknown driver";
 }
 
+type StaffAuthResult = {
+  status: string;
+  session?: { accessToken: string };
+  user?: SessionUser;
+  mfa?: { mfaToken: string; ticketId: string; expiresAt: string };
+  totpSecret?: string;
+  totpOtpauth?: string;
+};
+
 async function finishStaffAuth(
   email: string,
-  res: Awaited<ReturnType<typeof verifyOtp>>,
-): Promise<{ token: string; user: SessionUser }> {
+  res: StaffAuthResult,
+  authenticatorCode?: string,
+): Promise<{ token: string; user: SessionUser; needsManualMfa?: StaffAuthResult }> {
   if (res.status === "authenticated" && res.session?.accessToken && res.user) {
     return { token: res.session.accessToken, user: res.user };
   }
@@ -186,44 +171,59 @@ async function finishStaffAuth(
     (res.status === "mfa_enroll_required" || res.status === "mfa_required") &&
     res.mfa?.mfaToken
   ) {
+    if (!authenticatorCode) {
+      return { token: "", user: res.user!, needsManualMfa: res };
+    }
     if (res.totpSecret) writeTotpSecret(email, res.totpSecret);
-    const secret = res.totpSecret ?? readTotpSecret(email);
-    if (!secret) {
-      await resetStaffMfa(email);
-      clearTotpSecret(email);
-      throw new Error("mfa_reset_retry");
-    }
-    try {
-      const totpCode = await generateTotp(secret);
-      const mfa = await verifyMfa(res.mfa.mfaToken, totpCode);
-      if (!mfa.session?.accessToken || !mfa.user) throw new Error("mfa_incomplete");
-      return { token: mfa.session.accessToken, user: mfa.user };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      if (
-        message === "invalid_mfa_code" ||
-        message === "mfa_ticket_invalid" ||
-        message === "mfa_not_configured"
-      ) {
-        clearTotpSecret(email);
-        await resetStaffMfa(email);
-        throw new Error("mfa_reset_retry");
-      }
-      throw err;
-    }
+    const mfa = await verifyMfa(res.mfa.mfaToken, authenticatorCode.trim());
+    if (!mfa.session?.accessToken || !mfa.user) throw new Error("mfa_incomplete");
+    return { token: mfa.session.accessToken, user: mfa.user };
   }
   throw new Error(res.status || "mfa_required_or_incomplete");
 }
 
 function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => void }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"password" | "otp" | "mfa">("password");
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [pendingMfa, setPendingMfa] = useState<StaffAuthResult | null>(null);
   const [devHint, setDevHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function sendCode(e: React.FormEvent) {
+  async function completeWithRoles(token: string, user: SessionUser) {
+    let next = user;
+    if (!next.roles.includes("administrator")) {
+      await assignDevRole(next.id, "administrator");
+      next = (await fetchMe(token)).user;
+    }
+    onAuthed(token, next);
+  }
+
+  async function signInPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await loginWithPassword(email.trim(), password);
+      const finished = await finishStaffAuth(email.trim(), res);
+      if (finished.needsManualMfa) {
+        setPendingMfa(finished.needsManualMfa);
+        setMode("mfa");
+        return;
+      }
+      await completeWithRoles(finished.token, finished.user);
+    } catch (err) {
+      setError(humanAuthError(err instanceof Error ? err.message : "verify_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -241,29 +241,37 @@ function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => v
     }
   }
 
-  async function verify(e: React.FormEvent) {
+  async function verifyOtpStep(e: React.FormEvent) {
     e.preventDefault();
     if (!challengeId) return;
     setBusy(true);
     setError(null);
     try {
       const res = await verifyOtp(challengeId, code.trim());
-      let { token, user } = await finishStaffAuth(email.trim(), res);
-      if (!user.roles.includes("administrator")) {
-        await assignDevRole(user.id, "administrator");
-        user = (await fetchMe(token)).user;
+      const finished = await finishStaffAuth(email.trim(), res);
+      if (finished.needsManualMfa) {
+        setPendingMfa(finished.needsManualMfa);
+        setMode("mfa");
+        return;
       }
-      onAuthed(token, user);
+      await completeWithRoles(finished.token, finished.user);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "verify_failed";
-      if (message === "mfa_reset_retry") {
-        setChallengeId(null);
-        setCode("");
-        setDevHint(null);
-        setError(humanAuthError("mfa_reset_retry"));
-      } else {
-        setError(humanAuthError(message));
-      }
+      setError(humanAuthError(err instanceof Error ? err.message : "verify_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyMfaStep(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingMfa) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const finished = await finishStaffAuth(email.trim(), pendingMfa, mfaCode);
+      await completeWithRoles(finished.token, finished.user);
+    } catch (err) {
+      setError(humanAuthError(err instanceof Error ? err.message : "mfa_code_invalid"));
     } finally {
       setBusy(false);
     }
@@ -276,32 +284,117 @@ function Login({ onAuthed }: { onAuthed: (token: string, user: SessionUser) => v
           <BrandLockup />
         </p>
         <h1>Admin</h1>
-        <p className="muted">Configurator access — MFA required for staff.</p>
-        <form onSubmit={challengeId ? verify : sendCode} className="stack">
-          <label>
-            Email
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-            />
-          </label>
-          {challengeId ? (
+        <p className="muted">
+          Email, password, and authenticator app. MFA is required.
+        </p>
+
+        {mode === "password" ? (
+          <form onSubmit={signInPassword} className="stack">
             <label>
-              One-time code
+              Email
               <input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                autoComplete="one-time-code"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                type="email"
+                required
               />
             </label>
-          ) : null}
-          {devHint ? <p className="hint">Dev code: {devHint}</p> : null}
-          {error ? <p className="error">{error}</p> : null}
-          <button className="btn btn-primary" disabled={busy} type="submit">
-            {challengeId ? "Sign in" : "Send code"}
-          </button>
-        </form>
+            <label>
+              Password
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                type="password"
+                required
+              />
+            </label>
+            {error ? <p className="error">{error}</p> : null}
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              Sign in
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setMode("otp");
+                setError(null);
+              }}
+            >
+              First time / no password? Use email code
+            </button>
+          </form>
+        ) : null}
+
+        {mode === "otp" ? (
+          <form
+            onSubmit={challengeId ? verifyOtpStep : sendOtp}
+            className="stack"
+          >
+            <label>
+              Email
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                type="email"
+                required
+              />
+            </label>
+            {challengeId ? (
+              <label>
+                Email code
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  autoComplete="one-time-code"
+                />
+              </label>
+            ) : null}
+            {devHint ? <p className="hint">Dev code: {devHint}</p> : null}
+            {error ? <p className="error">{error}</p> : null}
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              {challengeId ? "Continue" : "Send code"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setMode("password")}
+            >
+              Back to password
+            </button>
+          </form>
+        ) : null}
+
+        {mode === "mfa" && pendingMfa ? (
+          <form onSubmit={verifyMfaStep} className="stack">
+            <p className="muted">
+              {pendingMfa.status === "mfa_enroll_required"
+                ? "Add this key in Google Authenticator (or similar), then enter the 6-digit code."
+                : "Enter the 6-digit code from your authenticator app."}
+            </p>
+            {pendingMfa.totpSecret ? (
+              <p className="hint">
+                Setup key: <code>{pendingMfa.totpSecret}</code>
+              </p>
+            ) : null}
+            <label>
+              Authenticator code
+              <input
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                required
+              />
+            </label>
+            {error ? <p className="error">{error}</p> : null}
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              Verify
+            </button>
+          </form>
+        ) : null}
       </div>
     </div>
   );
@@ -1123,9 +1216,9 @@ function Console({
             <section className="stack">
               <h1>Organisations</h1>
               <p className="muted">
-                Approve new company registrations, invite people, or reset a
-                forgotten password (temporary password only — old ones cannot be
-                viewed).
+                Review Enterprise applications, create companies after a
+                contract, invite Org Admins, or reset a forgotten password
+                (temporary password only — old ones cannot be viewed).
               </p>
               {tempPasswordNotice ? (
                 <p className="notice">{tempPasswordNotice}</p>
@@ -1135,8 +1228,9 @@ function Console({
                 <div className="panel stack">
                   <h2>Awaiting your approval</h2>
                   <p className="muted">
-                    Companies that registered on Enterprise. Approve to open
-                    portal access, or reject if the details look wrong.
+                    Company applications from the Enterprise portal. Approve to
+                    activate access (an email is sent), or reject if the details
+                    look wrong.
                   </p>
                   <table className="table">
                     <thead>
@@ -1216,6 +1310,10 @@ function Console({
 
               <div className="panel stack">
                 <h2>Create organisation</h2>
+                <p className="muted">
+                  Use this after the contract is agreed. Then invite the Org
+                  Admin so they can sign in on Enterprise.
+                </p>
                 <label className="label" htmlFor="org-name">
                   Company name
                 </label>

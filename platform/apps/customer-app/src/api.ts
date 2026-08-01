@@ -71,9 +71,63 @@ async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `request_failed_${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as T & {
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? data.message ?? `request_failed_${res.status}`);
+  }
   return data;
+}
+
+export async function loginWithPassword(identifier: string, password: string) {
+  return api<{
+    status: string;
+    session?: { accessToken: string };
+    user?: SessionUser;
+  }>("/v1/auth/password/login", {
+    body: { identifier, password },
+  });
+}
+
+export async function registerCustomer(body: {
+  email?: string;
+  phone?: string;
+  password: string;
+  displayName?: string;
+}) {
+  return api<{
+    challengeId: string;
+    expiresAt: string;
+    devCode?: string;
+  }>("/v1/auth/customers/register", { body });
+}
+
+export async function verifyCustomerRegister(challengeId: string, code: string) {
+  return api<{
+    status: string;
+    session?: { accessToken: string };
+    user?: SessionUser;
+  }>("/v1/auth/customers/register/verify", {
+    body: { challengeId, code },
+  });
+}
+
+export async function startPasswordReset(identifier: string) {
+  return api<{
+    ok: boolean;
+    challengeId?: string;
+    devCode?: string;
+  }>("/v1/auth/password/forgot", { body: { identifier } });
+}
+
+export async function completePasswordReset(body: {
+  challengeId: string;
+  code: string;
+  newPassword: string;
+}) {
+  return api<{ ok: boolean }>("/v1/auth/password/reset", { body });
 }
 
 export async function requestOtp(destination: string) {

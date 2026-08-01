@@ -3,18 +3,15 @@ import { db } from "../../db/client.js";
 import { driverProfiles, roleBindings, users } from "../../db/schema.js";
 import { writeAuditEvent } from "../audit/service.js";
 import { upsertDriverProfile } from "../dispatch/service.js";
-import { hashPassword, verifyPassword } from "./crypto.js";
+import { assertPasswordPolicy } from "../../shared/auth/password-policy.js";
+import { hashPassword } from "./crypto.js";
 import {
   assertPdfOrImageDataUrl,
   assertPhotoDataUrl,
 } from "./doc-validate.js";
 import { emailLookupCandidates } from "./email-aliases.js";
-import {
-  createSessionForUser,
-  getUserRoles,
-  requestOtp,
-  verifyOtp,
-} from "./service.js";
+import { loginWithPassword } from "./password-auth.js";
+import { requestOtp, verifyOtp } from "./service.js";
 
 export async function signupDriver(input: {
   email: string;
@@ -38,8 +35,11 @@ export async function signupDriver(input: {
   correlationId?: string;
 }) {
   const email = input.email.trim().toLowerCase();
-  if (input.password.length < 8) {
-    return { ok: false as const, error: "password_too_short" };
+  try {
+    assertPasswordPolicy(input.password);
+  } catch (err) {
+    const code = err instanceof Error ? err.message : "password_too_weak";
+    return { ok: false as const, error: code };
   }
 
   const idDoc = assertPdfOrImageDataUrl(input.idDocUrl, "id_doc_required");
@@ -225,62 +225,11 @@ export async function loginDriverPassword(input: {
   userAgent?: string;
   correlationId?: string;
 }) {
-  const email = input.email.trim().toLowerCase();
-  const user = await db.query.users.findFirst({
-    where: inArray(users.email, emailLookupCandidates(email)),
-  });
-  if (!user?.passwordHash) {
-    return { ok: false as const, error: "invalid_credentials" };
-  }
-  if (!verifyPassword(input.password, user.passwordHash)) {
-    await writeAuditEvent({
-      actorType: "system",
-      action: "AUTH_PASSWORD_FAILED",
-      subjectType: "user",
-      subjectId: user.id,
-      correlationId: input.correlationId,
-    });
-    return { ok: false as const, error: "invalid_credentials" };
-  }
-  if (user.status !== "active") {
-    return { ok: false as const, error: "user_inactive" };
-  }
-
-  const roles = await getUserRoles(user.id);
-  const session = await createSessionForUser({
-    userId: user.id,
-    mfaSatisfied: true,
+  return loginWithPassword({
+    identifier: input.email,
+    password: input.password,
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
     correlationId: input.correlationId,
   });
-
-  const profile = await db.query.driverProfiles.findFirst({
-    where: eq(driverProfiles.userId, user.id),
-  });
-
-  await writeAuditEvent({
-    actorType: "user",
-    actorId: user.id,
-    action: "AUTH_PASSWORD_OK",
-    subjectType: "user",
-    subjectId: user.id,
-    correlationId: input.correlationId,
-  });
-
-  return {
-    ok: true as const,
-    status: "authenticated" as const,
-    session,
-    user: {
-      id: user.id,
-      phone: user.phone,
-      email: user.email,
-      displayName: user.displayName,
-      status: user.status,
-      totpEnabled: user.totpEnabled,
-      roles,
-    },
-    profile,
-  };
 }

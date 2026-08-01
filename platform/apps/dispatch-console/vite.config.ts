@@ -22,13 +22,15 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      host: true,
       port: 5173,
+      strictPort: true,
       fs: {
         allow: [root, path.resolve(root, "../../design-system"), shared],
       },
       proxy: {
-        "/v1": "http://localhost:3000",
-        "/health": "http://localhost:3000",
+        "/v1": "http://127.0.0.1:3000",
+        "/health": "http://127.0.0.1:3000",
       },
     },
   };

@@ -57,25 +57,14 @@ async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `request_failed_${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as T & {
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? data.message ?? `request_failed_${res.status}`);
+  }
   return data;
-}
-
-export async function requestOtp(destination: string) {
-  return api<{ challengeId: string; devCode?: string }>("/v1/auth/otp/request", {
-    body: { channel: "email", destination },
-  });
-}
-
-export async function verifyOtp(challengeId: string, code: string) {
-  return api<{
-    status: string;
-    session?: { accessToken: string };
-    user?: SessionUser;
-  }>("/v1/auth/otp/verify", {
-    body: { challengeId, code },
-  });
 }
 
 export async function loginWithPassword(email: string, password: string) {
@@ -85,6 +74,26 @@ export async function loginWithPassword(email: string, password: string) {
     user?: SessionUser;
   }>("/v1/auth/password/login", {
     body: { email, password },
+  });
+}
+
+export async function startPasswordReset(identifier: string) {
+  return api<{
+    ok: boolean;
+    status: string;
+    challengeId?: string;
+    expiresAt?: string;
+    devCode?: string;
+  }>("/v1/auth/password/forgot", { body: { identifier } });
+}
+
+export async function completePasswordReset(body: {
+  challengeId: string;
+  code: string;
+  newPassword: string;
+}) {
+  return api<{ ok: boolean; status: string }>("/v1/auth/password/reset", {
+    body,
   });
 }
 
@@ -125,22 +134,7 @@ export async function completeEnterpriseRegister(body: {
       payMode?: string;
       status?: string;
     };
-    membership?: { orgId: string; role: string; membershipId: string };
   }>("/v1/enterprise/register/complete", { body });
-}
-
-export async function signupEnterprise(body: {
-  companyName: string;
-  displayName: string;
-  email: string;
-  password: string;
-}) {
-  return api<{
-    status: string;
-    session: { accessToken: string };
-    user: SessionUser;
-    org: { id: string; name: string };
-  }>("/v1/enterprise/signup", { body });
 }
 
 export async function fetchEnterpriseSession(token: string) {

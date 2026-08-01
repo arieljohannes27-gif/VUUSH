@@ -274,7 +274,7 @@ export default function App() {
             <a className="continuum-row" href={ENTERPRISE_URL}>
               <span className="continuum-name">Enterprise</span>
               <span className="continuum-line">
-                Ship as an organisation — sites, members, statements.
+                Contracted organisations — sites, members, statements.
               </span>
             </a>
             <div className="continuum-row muted-row">

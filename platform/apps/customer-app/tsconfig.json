@@ -15,7 +15,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@vuush/auth": ["../../src/shared/auth/index.ts"],
+      "@vuush/auth/*": ["../../src/shared/auth/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../src/shared/auth"]
 }

@@ -1,13 +1,24 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAuth, requireRoles } from "../../plugins/auth.js";
 import { isDev } from "../../config.js";
+import { humanAuthError } from "../../shared/auth/messages.js";
+import { PASSWORD_MIN_LENGTH } from "../../shared/auth/password-policy.js";
 import { isRole } from "./roles.js";
 import {
-  loginDriverPassword,
   signupDriver,
   verifyDriverSignup,
 } from "./driver-auth.js";
+import {
+  registerCustomer,
+  verifyCustomerRegister,
+} from "./customer-auth.js";
+import {
+  completePasswordReset,
+  loginWithPassword,
+  revokeAllSessionsForUser,
+  startPasswordReset,
+} from "./password-auth.js";
 import {
   assignRole,
   refreshSession,
@@ -18,6 +29,19 @@ import {
   recoverStaffMfaWithOtp,
   verifyOtp,
 } from "./service.js";
+
+function sendAuthError(
+  reply: FastifyReply,
+  status: number,
+  error: string,
+  extra?: Record<string, unknown>,
+) {
+  return reply.status(status).send({
+    error,
+    message: humanAuthError(error),
+    ...extra,
+  });
+}
 
 const otpRequestSchema = z.object({
   channel: z.enum(["phone", "email"]),
@@ -71,7 +95,7 @@ export async function identityRoutes(app: FastifyInstance) {
     const parsed = z
       .object({
         email: z.string().email(),
-        password: z.string().min(8).max(200),
+        password: z.string().min(PASSWORD_MIN_LENGTH).max(200),
         displayName: z.string().min(2).max(120),
         phone: z.string().min(7).max(40).optional(),
         licenceRef: z.string().max(200).optional(),
@@ -105,12 +129,11 @@ export async function identityRoutes(app: FastifyInstance) {
         result.error === "otp_delivery_failed" ||
         result.error === "otp_email_not_configured"
       ) {
-        return reply.status(503).send({
-          error: result.error,
+        return sendAuthError(reply, 503, result.error, {
           userId: "userId" in result ? result.userId : undefined,
         });
       }
-      return reply.status(400).send({ error: result.error });
+      return sendAuthError(reply, 400, result.error);
     }
     return reply.status(201).send(result);
   });
@@ -118,8 +141,7 @@ export async function identityRoutes(app: FastifyInstance) {
   app.post("/v1/auth/drivers/signup/verify", async (request, reply) => {
     const parsed = otpVerifySchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: "validation_error",
+      return sendAuthError(reply, 400, "validation_error", {
         details: parsed.error.flatten(),
       });
     }
@@ -130,7 +152,7 @@ export async function identityRoutes(app: FastifyInstance) {
       correlationId: request.id,
     });
     if (!result.ok) {
-      return reply.status(401).send({ error: result.error });
+      return sendAuthError(reply, 401, result.error);
     }
     return reply.send(result);
   });
@@ -138,27 +160,150 @@ export async function identityRoutes(app: FastifyInstance) {
   app.post("/v1/auth/password/login", authLimit, async (request, reply) => {
     const parsed = z
       .object({
-        email: z.string().email(),
+        // Accept legacy `email` or new `identifier` (email or phone).
+        email: z.string().min(3).max(320).optional(),
+        identifier: z.string().min(3).max(320).optional(),
         password: z.string().min(1).max(200),
       })
       .safeParse(request.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: "validation_error",
+      return sendAuthError(reply, 400, "validation_error", {
         details: parsed.error.flatten(),
       });
     }
-    const result = await loginDriverPassword({
-      ...parsed.data,
+    const identifier = (
+      parsed.data.identifier ??
+      parsed.data.email ??
+      ""
+    ).trim();
+    if (!identifier) {
+      return sendAuthError(reply, 400, "validation_error");
+    }
+    const result = await loginWithPassword({
+      identifier,
+      password: parsed.data.password,
       ipAddress: request.ip,
       userAgent: request.headers["user-agent"],
       correlationId: request.id,
     });
     if (!result.ok) {
-      return reply.status(401).send({ error: result.error });
+      return sendAuthError(reply, 401, result.error);
     }
     return reply.send(result);
   });
+
+  app.post("/v1/auth/password/forgot", authLimit, async (request, reply) => {
+    const parsed = z
+      .object({
+        identifier: z.string().min(3).max(320).optional(),
+        email: z.string().min(3).max(320).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return sendAuthError(reply, 400, "validation_error");
+    }
+    const identifier = (
+      parsed.data.identifier ??
+      parsed.data.email ??
+      ""
+    ).trim();
+    if (!identifier) {
+      return sendAuthError(reply, 400, "validation_error");
+    }
+    const result = await startPasswordReset({
+      identifier,
+      correlationId: request.id,
+    });
+    return reply.send(result);
+  });
+
+  app.post("/v1/auth/password/reset", authLimit, async (request, reply) => {
+    const parsed = z
+      .object({
+        challengeId: z.string().uuid(),
+        code: z.string().min(4).max(12),
+        newPassword: z.string().min(PASSWORD_MIN_LENGTH).max(200),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return sendAuthError(reply, 400, "validation_error", {
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await completePasswordReset({
+        ...parsed.data,
+        correlationId: request.id,
+      });
+      if (!result.ok) {
+        return sendAuthError(reply, 400, result.error);
+      }
+      return reply.send(result);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "password_too_weak";
+      return sendAuthError(reply, 400, code);
+    }
+  });
+
+  app.post("/v1/auth/customers/register", authLimit, async (request, reply) => {
+    const parsed = z
+      .object({
+        email: z.string().email().optional(),
+        phone: z.string().min(7).max(40).optional(),
+        password: z.string().min(PASSWORD_MIN_LENGTH).max(200),
+        displayName: z.string().min(2).max(120).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return sendAuthError(reply, 400, "validation_error", {
+        details: parsed.error.flatten(),
+      });
+    }
+    if (!parsed.data.email && !parsed.data.phone) {
+      return sendAuthError(reply, 400, "validation_error");
+    }
+    try {
+      const result = await registerCustomer({
+        ...parsed.data,
+        correlationId: request.id,
+      });
+      if (!result.ok) {
+        if (
+          result.error === "otp_delivery_failed" ||
+          result.error === "otp_email_not_configured" ||
+          result.error === "otp_sms_not_configured"
+        ) {
+          return sendAuthError(reply, 503, result.error);
+        }
+        return sendAuthError(reply, 400, result.error);
+      }
+      return reply.status(201).send(result);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "password_too_weak";
+      return sendAuthError(reply, 400, code);
+    }
+  });
+
+  app.post(
+    "/v1/auth/customers/register/verify",
+    otpVerifyLimit,
+    async (request, reply) => {
+      const parsed = otpVerifySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendAuthError(reply, 400, "validation_error");
+      }
+      const result = await verifyCustomerRegister({
+        ...parsed.data,
+        ipAddress: request.ip,
+        userAgent: request.headers["user-agent"],
+        correlationId: request.id,
+      });
+      if (!result.ok) {
+        return sendAuthError(reply, 401, result.error);
+      }
+      return reply.send(result);
+    },
+  );
 
   app.post("/v1/auth/otp/request", authLimit, async (request, reply) => {
     const parsed = otpRequestSchema.safeParse(request.body);
@@ -283,6 +428,18 @@ export async function identityRoutes(app: FastifyInstance) {
     });
     return reply.send({ ok: true });
   });
+
+  app.post(
+    "/v1/auth/logout-all",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      await revokeAllSessionsForUser({
+        userId: request.authUser!.id,
+        correlationId: request.id,
+      });
+      return reply.send({ ok: true });
+    },
+  );
 
   app.get(
     "/v1/me",

@@ -17,8 +17,6 @@ import {
   quoteJob,
   replySupport,
   requestMutation,
-  requestOtp,
-  verifyOtp,
   type DriverProfessional,
   type Job,
   type Projection,
@@ -26,6 +24,8 @@ import {
   type SessionUser,
   type SupportCase,
 } from "./api";
+import { CustomerAuth } from "./CustomerAuth";
+import { humanAuthError } from "@vuush/auth";
 
 type Tab = "home" | "activity" | "support" | "profile";
 type BookStep = "route" | "package" | "quote" | "done";
@@ -117,11 +117,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [email, setEmail] = useState("");
-  const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [otp, setOtp] = useState("");
-  const [devCode, setDevCode] = useState<string | null>(null);
-
   const [booking, setBooking] = useState(false);
   const [bookStep, setBookStep] = useState<BookStep>("route");
   const [pickupAddress, setPickupAddress] = useState("1 Long Street, Cape Town");
@@ -158,7 +153,9 @@ export default function App() {
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "request_failed");
+      setError(
+        humanAuthError(err instanceof Error ? err.message : "request_failed"),
+      );
     } finally {
       setBusy(false);
     }
@@ -221,27 +218,6 @@ export default function App() {
   }, [token, trackJobId]);
 
   const activeJobs = jobs.filter((j) => ACTIVE.has(j.state));
-
-  async function handleRequestOtp() {
-    await run(async () => {
-      const res = await requestOtp(email.trim());
-      setChallengeId(res.challengeId);
-      setDevCode(res.devCode ?? null);
-      if (res.devCode) setOtp(res.devCode);
-    });
-  }
-
-  async function handleVerifyOtp() {
-    if (!challengeId) return;
-    await run(async () => {
-      const res = await verifyOtp(challengeId, otp.trim());
-      if (!res.session?.accessToken || !res.user) throw new Error("login_incomplete");
-      writeStoredToken(res.session.accessToken);
-      setToken(res.session.accessToken);
-      setUser(res.user);
-      setNotice("Signed in.");
-    });
-  }
 
   function startBooking() {
     setBooking(true);
@@ -370,52 +346,15 @@ export default function App() {
   if (!token || !user) {
     return (
       <div className="app">
-        {error && <div className="banner banner-error">{error}</div>}
         <div className="app-shell stack">
-          <div>
-            <BrandLockup />
-            <p className="lede">
-              Your time back — from intention to completion.
-            </p>
-          </div>
-          <div className="panel stack">
-            <div>
-              <label className="label" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                className="field"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
-            </div>
-            {!challengeId ? (
-              <button className="btn btn-primary btn-block" disabled={busy} onClick={handleRequestOtp}>
-                Send code
-              </button>
-            ) : (
-              <>
-                <div>
-                  <label className="label" htmlFor="otp">
-                    One-time code
-                  </label>
-                  <input
-                    id="otp"
-                    className="field"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    inputMode="numeric"
-                  />
-                  {devCode && <p className="muted">Dev code: {devCode}</p>}
-                </div>
-                <button className="btn btn-primary btn-block" disabled={busy} onClick={handleVerifyOtp}>
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
+          <CustomerAuth
+            onAuthed={(accessToken, nextUser) => {
+              writeStoredToken(accessToken);
+              setToken(accessToken);
+              setUser(nextUser);
+              setNotice("Signed in.");
+            }}
+          />
         </div>
       </div>
     );

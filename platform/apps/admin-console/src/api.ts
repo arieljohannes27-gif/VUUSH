@@ -28,9 +28,27 @@ async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `request_failed_${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as T & {
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? data.message ?? `request_failed_${res.status}`);
+  }
   return data;
+}
+
+export async function loginWithPassword(email: string, password: string) {
+  return api<{
+    status: string;
+    session?: { accessToken: string };
+    user?: SessionUser;
+    mfa?: { mfaToken: string; ticketId: string; expiresAt: string };
+    totpSecret?: string;
+    totpOtpauth?: string;
+  }>("/v1/auth/password/login", {
+    body: { email, password },
+  });
 }
 
 export async function requestOtp(destination: string) {

@@ -183,15 +183,31 @@ export async function verifyDriverSignup(challengeId: string, code: string) {
   });
 }
 
-export async function loginPassword(email: string, password: string) {
+export async function loginPassword(identifier: string, password: string) {
   return api<{
     status: string;
     session: { accessToken: string };
     user: SessionUser;
     profile?: DriverProfile | null;
   }>("/v1/auth/password/login", {
-    body: { email, password },
+    body: { identifier, password },
   });
+}
+
+export async function startPasswordReset(identifier: string) {
+  return api<{
+    ok: boolean;
+    challengeId?: string;
+    devCode?: string;
+  }>("/v1/auth/password/forgot", { body: { identifier } });
+}
+
+export async function completePasswordReset(body: {
+  challengeId: string;
+  code: string;
+  newPassword: string;
+}) {
+  return api<{ ok: boolean }>("/v1/auth/password/reset", { body });
 }
 
 export async function fetchMe(token: string) {

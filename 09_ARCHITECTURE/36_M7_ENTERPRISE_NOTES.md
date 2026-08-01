@@ -75,8 +75,14 @@
 - API: https://vuush-production.up.railway.app (migrate on deploy via Dockerfile)
 - Marketing Enterprise CTA → `vuush-enterprise.vercel.app`
 
-## Self-serve signup
+## How companies get in (B2B)
 
-- `POST /v1/enterprise/signup` — company name + name + email + password → Org Admin session
-- Portal: Sign up / Sign in (password); email code kept as fallback
-- **Passwords cannot be viewed** (hashed). Admin → Organisations → Members → **Reset password** issues a temporary password once
+1. Company **Applies** on Enterprise (details + password + one email verify)
+2. Org stays `pending_review` — no portal access yet
+3. Admin → Organisations → **Approve** (email sent) or **Reject**
+4. User signs in with work email + password — **no MFA**
+5. Admin can still **Create organisation** + invite after a contract
+
+Public legacy `/v1/enterprise/signup` stays closed.  
+Password policy: 12+ with upper/lower/number/symbol (see `37_AUTH_ARCHITECTURE.md`).  
+**Passwords cannot be viewed** (hashed). Admin → Reset password issues a temporary password once.
