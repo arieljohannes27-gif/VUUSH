@@ -542,6 +542,86 @@ export async function resetStaffMfa(input: {
   return { userId: user.id, email };
 }
 
+/**
+ * After proving email ownership with OTP, clear staff authenticator and
+ * return a fresh enroll secret (lost-phone / never-saved-key recovery).
+ */
+export async function recoverStaffMfaWithOtp(input: {
+  challengeId: string;
+  code: string;
+  ipAddress?: string;
+  userAgent?: string;
+  correlationId?: string;
+}) {
+  const challenge = await db.query.otpChallenges.findFirst({
+    where: eq(otpChallenges.id, input.challengeId),
+  });
+
+  if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
+    return { ok: false as const, error: "challenge_invalid_or_expired" };
+  }
+  if (challenge.attempts >= challenge.maxAttempts) {
+    return { ok: false as const, error: "challenge_locked" };
+  }
+
+  const valid = hashSecret(input.code.trim()) === challenge.codeHash;
+  await db
+    .update(otpChallenges)
+    .set({ attempts: challenge.attempts + 1 })
+    .where(eq(otpChallenges.id, challenge.id));
+
+  if (!valid) {
+    return { ok: false as const, error: "invalid_code" };
+  }
+
+  await db
+    .update(otpChallenges)
+    .set({ consumedAt: new Date() })
+    .where(eq(otpChallenges.id, challenge.id));
+
+  const channel = challenge.channel as "phone" | "email";
+  const user = await findOrCreateUser(channel, challenge.destination);
+  if (user.status !== "active") {
+    return { ok: false as const, error: "user_inactive" };
+  }
+
+  await ensureFoundingDispatcherAccess(user);
+  const roles = await getUserRoles(user.id);
+  if (!requiresStaffMfa(roles)) {
+    return { ok: false as const, error: "not_staff" };
+  }
+
+  const enrollSecret = generateTotpSecret();
+  await db
+    .update(users)
+    .set({
+      totpSecret: enrollSecret,
+      totpEnabled: false,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, user.id));
+
+  const ticket = await createMfaTicket(user.id, "totp_enroll");
+  await writeAuditEvent({
+    actorType: "user",
+    actorId: user.id,
+    action: "AUTH_MFA_RECOVER",
+    subjectType: "user",
+    subjectId: user.id,
+    correlationId: input.correlationId,
+    payload: { email: user.email },
+  });
+
+  return {
+    ok: true as const,
+    status: "mfa_enroll_required" as const,
+    mfa: ticket,
+    totpSecret: enrollSecret,
+    totpOtpauth: `otpauth://totp/VUUSH:${encodeURIComponent(user.email ?? user.phone ?? user.id)}?secret=${enrollSecret}&issuer=VUUSH`,
+    user: publicUser(user, roles),
+  };
+}
+
 export async function assignRole(input: {
   userId: string;
   role: Role;

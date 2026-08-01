@@ -20,6 +20,7 @@ import {
   reassignJob,
   releaseHold,
   requestOtp,
+  recoverMfa,
   resolveIncident,
   verifyMfa,
   verifyOtp,
@@ -226,7 +227,9 @@ function Login({
   const [code, setCode] = useState("");
   const [devHint, setDevHint] = useState<string | null>(null);
   const [mfaToken, setMfaToken] = useState<string | null>(null);
-  const [mfaMode, setMfaMode] = useState<"enroll" | "verify" | null>(null);
+  const [mfaMode, setMfaMode] = useState<"enroll" | "verify" | "recover" | null>(
+    null,
+  );
   const [totpSecret, setTotpSecret] = useState<string | null>(null);
   const [totpOtpauth, setTotpOtpauth] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -243,6 +246,28 @@ function Login({
     setTotpOtpauth(null);
     setMfaCode("");
     setError(null);
+  }
+
+  async function beginRecoverSetup() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await requestOtp(email.trim());
+      setMfaToken(null);
+      setTotpSecret(null);
+      setTotpOtpauth(null);
+      setMfaCode("");
+      setMfaMode("recover");
+      setChallengeId(res.challengeId);
+      setCode(res.devCode ?? "");
+      setDevHint(res.devCode ?? null);
+    } catch (err) {
+      setError(
+        humanAuthError(err instanceof Error ? err.message : "otp_failed"),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function sendCode(e: React.FormEvent) {
@@ -271,6 +296,31 @@ function Login({
     setBusy(true);
     setError(null);
     try {
+      if (mfaMode === "recover") {
+        const res = await recoverMfa(challengeId, code.trim());
+        if (
+          res.status === "mfa_enroll_required" &&
+          res.mfa?.mfaToken &&
+          res.totpSecret
+        ) {
+          if (!res.user || !staffAllowed(res.user)) {
+            setError(humanAuthError("not_staff"));
+            return;
+          }
+          setMfaToken(res.mfa.mfaToken);
+          setMfaMode("enroll");
+          setTotpSecret(res.totpSecret);
+          setTotpOtpauth(res.totpOtpauth ?? null);
+          setMfaCode("");
+          setChallengeId(null);
+          setCode("");
+          setDevHint(null);
+          return;
+        }
+        setError(humanAuthError(res.status || "verify_failed"));
+        return;
+      }
+
       const res = await verifyOtp(challengeId, code.trim());
       if (res.status === "authenticated" && res.session?.accessToken && res.user) {
         if (!staffAllowed(res.user)) {
@@ -341,43 +391,67 @@ function Login({
           Your time back — from intention to completion.
         </p>
 
-        {mfaMode && mfaToken ? (
+        {mfaMode === "enroll" && mfaToken ? (
           <form onSubmit={verifyAuthenticator}>
-            {mfaMode === "enroll" ? (
-              <div className="mfa-enroll">
-                <p className="login-step-title">Set up authenticator</p>
-                <p className="hint">
-                  Add VUUSH in Google Authenticator, Authy, or 1Password using
-                  this key. Then enter the 6-digit code.
+            <div className="mfa-enroll">
+              <p className="login-step-title">Set up authenticator</p>
+              <p className="hint">
+                This key is not in your email. Open Google Authenticator → + →
+                Enter a setup key → paste the key below. Then type the 6-digit
+                code the app shows.
+              </p>
+              {totpSecret ? (
+                <p className="mfa-secret" title="Authenticator secret">
+                  <code>{totpSecret}</code>
                 </p>
-                {totpSecret ? (
-                  <p className="mfa-secret" title="Authenticator secret">
-                    <code>{totpSecret}</code>
-                  </p>
-                ) : null}
-                {totpOtpauth ? (
-                  <button
-                    className="btn btn-ghost mfa-otpauth-copy"
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(totpOtpauth).catch(
-                        () => undefined,
-                      );
-                    }}
-                  >
-                    Copy setup link
-                  </button>
-                ) : null}
+              ) : null}
+              {totpOtpauth ? (
+                <button
+                  className="btn btn-ghost mfa-otpauth-copy"
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(totpOtpauth).catch(
+                      () => undefined,
+                    );
+                  }}
+                >
+                  Copy setup link
+                </button>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="mfa">6-digit code from the app</label>
+              <input
+                id="mfa"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+              />
+            </div>
+            {error ? (
+              <div className="error" role="alert">
+                {error}
               </div>
-            ) : (
-              <>
-                <p className="login-step-title">Authenticator code</p>
-                <p className="hint">
-                  Open your authenticator app and enter the 6-digit code for
-                  VUUSH.
-                </p>
-              </>
-            )}
+            ) : null}
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              {busy ? "Checking…" : "Continue"}
+            </button>
+            <button
+              className="btn btn-ghost"
+              type="button"
+              onClick={resetToEmail}
+            >
+              Start over
+            </button>
+          </form>
+        ) : mfaMode === "verify" && mfaToken ? (
+          <form onSubmit={verifyAuthenticator}>
+            <p className="login-step-title">Authenticator code</p>
+            <p className="hint">
+              Open Google Authenticator and enter the 6-digit code for VUUSH.
+              This is not the email code.
+            </p>
             <div className="field">
               <label htmlFor="mfa">6-digit code</label>
               <input
@@ -395,6 +469,14 @@ function Login({
             ) : null}
             <button className="btn btn-primary" disabled={busy} type="submit">
               {busy ? "Checking…" : "Continue"}
+            </button>
+            <button
+              className="btn btn-ghost"
+              type="button"
+              disabled={busy}
+              onClick={() => void beginRecoverSetup()}
+            >
+              I don’t have the app set up yet
             </button>
             <button
               className="btn btn-ghost"
@@ -429,6 +511,19 @@ function Login({
           </form>
         ) : (
           <form onSubmit={verify}>
+            <p className="login-step-title">
+              {mfaMode === "recover"
+                ? "Confirm email to get a setup key"
+                : "Email code"}
+            </p>
+            {mfaMode === "recover" ? (
+              <p className="hint">
+                Enter the new code from your email. Next we show the
+                authenticator setup key.
+              </p>
+            ) : (
+              <p className="hint">Check your email for the sign-in code.</p>
+            )}
             <div className="field">
               <label htmlFor="code">Email code</label>
               <input
@@ -441,23 +536,25 @@ function Login({
             </div>
             {devHint ? (
               <p className="hint">Local code ready (development only).</p>
-            ) : (
-              <p className="hint">Check your email for the sign-in code.</p>
-            )}
+            ) : null}
             {error ? (
               <div className="error" role="alert">
                 {error}
               </div>
             ) : null}
             <button className="btn btn-primary" disabled={busy} type="submit">
-              Continue
+              {busy
+                ? "Checking…"
+                : mfaMode === "recover"
+                  ? "Show setup key"
+                  : "Continue"}
             </button>
             <button
               className="btn btn-ghost"
               type="button"
               onClick={resetToEmail}
             >
-              Use a different email
+              Start over
             </button>
           </form>
         )}
@@ -465,6 +562,7 @@ function Login({
     </div>
   );
 }
+
 
 function Board({
   token,

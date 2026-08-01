@@ -15,6 +15,7 @@ import {
   resetStaffMfa,
   revokeSession,
   verifyMfa,
+  recoverStaffMfaWithOtp,
   verifyOtp,
 } from "./service.js";
 
@@ -224,6 +225,27 @@ export async function identityRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: result.error });
     }
     return reply.send({ status: "authenticated", ...result });
+  });
+
+  /** Email OTP proof → wipe staff authenticator and return a fresh setup key. */
+  app.post("/v1/auth/mfa/recover", otpVerifyLimit, async (request, reply) => {
+    const parsed = otpVerifySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "validation_error",
+        details: parsed.error.flatten(),
+      });
+    }
+    const result = await recoverStaffMfaWithOtp({
+      ...parsed.data,
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"],
+      correlationId: request.id,
+    });
+    if (!result.ok) {
+      return reply.status(401).send({ error: result.error });
+    }
+    return reply.send(result);
   });
 
   app.post("/v1/auth/token/refresh", authLimit, async (request, reply) => {

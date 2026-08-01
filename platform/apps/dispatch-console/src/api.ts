@@ -67,6 +67,19 @@ export async function verifyMfa(mfaToken: string, code: string) {
   });
 }
 
+/** After email OTP — wipe old authenticator and get a fresh setup key. */
+export async function recoverMfa(challengeId: string, code: string) {
+  return api<{
+    status: string;
+    mfa?: { mfaToken: string; ticketId: string; expiresAt: string };
+    totpSecret?: string;
+    totpOtpauth?: string;
+    user?: SessionUser;
+  }>("/v1/auth/mfa/recover", {
+    body: { challengeId, code },
+  });
+}
+
 export async function fetchMe(token: string) {
   return api<{ user: SessionUser }>("/v1/me", { token });
 }
