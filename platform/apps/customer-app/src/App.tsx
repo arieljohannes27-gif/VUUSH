@@ -26,9 +26,14 @@ import {
 } from "./api";
 import { CustomerAuth } from "./CustomerAuth";
 import { humanAuthError } from "@vuush/auth";
-
-type Tab = "home" | "activity" | "support" | "profile";
-type BookStep = "route" | "package" | "quote" | "done";
+import {
+  pathFromRoute,
+  routeFromPath,
+  routesEqual,
+  type BookStep,
+  type CustomerRoute,
+  type Tab,
+} from "./route";
 
 const TOKEN_KEY = "vuush.customer.token";
 const TOKEN_KEY_LEGACY = "swift.customer.token";
@@ -108,17 +113,28 @@ function BrandLockup() {
 }
 
 export default function App() {
+  const initialRoute = routeFromPath(window.location.pathname);
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [tab, setTab] = useState<Tab>("home");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (initialRoute.screen === "activity") return "activity";
+    if (initialRoute.screen === "support" || initialRoute.screen === "support-case")
+      return "support";
+    if (initialRoute.screen === "profile") return "profile";
+    return "home";
+  });
   const [jobs, setJobs] = useState<Job[]>([]);
   const [zones, setZones] = useState<Array<{ code: string; name: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [booking, setBooking] = useState(false);
-  const [bookStep, setBookStep] = useState<BookStep>("route");
+  const [booking, setBooking] = useState(
+    () => initialRoute.screen === "book",
+  );
+  const [bookStep, setBookStep] = useState<BookStep>(() =>
+    initialRoute.screen === "book" ? initialRoute.step : "route",
+  );
   const [pickupAddress, setPickupAddress] = useState("1 Long Street, Cape Town");
   const [dropoffAddress, setDropoffAddress] = useState("50 Main Road, Sea Point");
   const [pickupZone, setPickupZone] = useState("CPT-CBD");
@@ -130,7 +146,9 @@ export default function App() {
   const [draftJob, setDraftJob] = useState<Job | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
 
-  const [trackJobId, setTrackJobId] = useState<string | null>(null);
+  const [trackJobId, setTrackJobId] = useState<string | null>(() =>
+    initialRoute.screen === "track" ? initialRoute.jobId : null,
+  );
   const [trackJob, setTrackJob] = useState<Job | null>(null);
   const [projection, setProjection] = useState<Projection | null>(null);
   const [mutationAddress, setMutationAddress] = useState("");
@@ -140,11 +158,131 @@ export default function App() {
   const [supportMessage, setSupportMessage] = useState("");
   const [supportJobId, setSupportJobId] = useState("");
   const [myCases, setMyCases] = useState<SupportCase[]>([]);
-  const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
+  const [activeCaseId, setActiveCaseId] = useState<string | null>(() =>
+    initialRoute.screen === "support-case" ? initialRoute.caseId : null,
+  );
   const [caseThread, setCaseThread] = useState<Awaited<
     ReturnType<typeof getSupportCase>
   > | null>(null);
   const [caseReply, setCaseReply] = useState("");
+
+  function currentRoute(): CustomerRoute {
+    if (tab === "activity") return { screen: "activity" };
+    if (tab === "profile") return { screen: "profile" };
+    if (tab === "support") {
+      return activeCaseId
+        ? { screen: "support-case", caseId: activeCaseId }
+        : { screen: "support" };
+    }
+    if (trackJobId) return { screen: "track", jobId: trackJobId };
+    if (booking) return { screen: "book", step: bookStep };
+    return { screen: "home" };
+  }
+
+  function applyRoute(route: CustomerRoute) {
+    switch (route.screen) {
+      case "home":
+        setTab("home");
+        setBooking(false);
+        setTrackJobId(null);
+        setTrackJob(null);
+        setProjection(null);
+        setActiveCaseId(null);
+        setCaseThread(null);
+        break;
+      case "book":
+        setTab("home");
+        setBooking(true);
+        setBookStep(route.step);
+        setTrackJobId(null);
+        setTrackJob(null);
+        setProjection(null);
+        break;
+      case "track":
+        setTab("home");
+        setBooking(false);
+        setTrackJobId(route.jobId);
+        setTrackJob(null);
+        setProjection(null);
+        break;
+      case "activity":
+        setTab("activity");
+        setBooking(false);
+        setTrackJobId(null);
+        setTrackJob(null);
+        setProjection(null);
+        break;
+      case "support":
+        setTab("support");
+        setActiveCaseId(null);
+        setCaseThread(null);
+        setBooking(false);
+        setTrackJobId(null);
+        break;
+      case "support-case":
+        setTab("support");
+        setActiveCaseId(route.caseId);
+        setBooking(false);
+        setTrackJobId(null);
+        break;
+      case "profile":
+        setTab("profile");
+        setBooking(false);
+        setTrackJobId(null);
+        break;
+    }
+  }
+
+  function go(route: CustomerRoute, opts?: { replace?: boolean }) {
+    const path = pathFromRoute(route);
+    const same = routesEqual(route, currentRoute());
+    applyRoute(route);
+    if (same && window.location.pathname === path) return;
+    if (opts?.replace) {
+      window.history.replaceState({ route }, "", path);
+    } else {
+      window.history.pushState({ route }, "", path);
+    }
+  }
+
+  function goBack() {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    go({ screen: "home" }, { replace: true });
+  }
+
+  useEffect(() => {
+    const path = pathFromRoute(currentRoute());
+    if (window.location.pathname !== path) {
+      window.history.replaceState({ route: currentRoute() }, "", path);
+    }
+
+    function onPopState() {
+      applyRoute(routeFromPath(window.location.pathname));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // Mount-only: wire browser Back/Forward once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!token || !activeCaseId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const thread = await getSupportCase(token, activeCaseId);
+        if (!cancelled) setCaseThread(thread);
+      } catch {
+        /* keep list; user can retry */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeCaseId]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -220,17 +358,15 @@ export default function App() {
   const activeJobs = jobs.filter((j) => ACTIVE.has(j.state));
 
   function startBooking() {
-    setBooking(true);
-    setBookStep("route");
     setDraftJob(null);
     setQuote(null);
-    setTrackJobId(null);
+    go({ screen: "book", step: "route" });
   }
 
   async function submitRoute() {
     await run(async () => {
       if (!token) return;
-      setBookStep("package");
+      go({ screen: "book", step: "package" });
     });
   }
 
@@ -257,7 +393,7 @@ export default function App() {
       const quoted = await quoteJob(token, created.job.id);
       setDraftJob(quoted.job);
       setQuote(quoted.quote);
-      setBookStep("quote");
+      go({ screen: "book", step: "quote" });
     });
   }
 
@@ -266,18 +402,14 @@ export default function App() {
       if (!token || !draftJob) return;
       const confirmed = await confirmJob(token, draftJob.id);
       setDraftJob(confirmed.job);
-      setBookStep("done");
+      go({ screen: "book", step: "done" });
       setNotice("Booking confirmed. Payment recorded.");
       await refreshJobs(token);
     });
   }
 
   async function openTrack(jobId: string) {
-    setBooking(false);
-    setTrackJob(null);
-    setProjection(null);
-    setTrackJobId(jobId);
-    setTab("home");
+    go({ screen: "track", jobId });
   }
 
   async function handleCancel() {
@@ -285,9 +417,7 @@ export default function App() {
     await run(async () => {
       await cancelJob(token, trackJob.id);
       setNotice("Delivery cancelled.");
-      setTrackJobId(null);
-      setTrackJob(null);
-      setProjection(null);
+      go({ screen: "home" });
       await refreshJobs(token);
     });
   }
@@ -323,16 +453,13 @@ export default function App() {
       setSupportMessage("");
       setNotice(`Support case ${res.case.publicCode} opened.`);
       await refreshCases(token);
-      setActiveCaseId(res.case.caseId);
+      go({ screen: "support-case", caseId: res.case.caseId });
     });
   }
 
   async function openCase(caseId: string) {
     if (!token) return;
-    setActiveCaseId(caseId);
-    await run(async () => {
-      setCaseThread(await getSupportCase(token, caseId));
-    });
+    go({ screen: "support-case", caseId });
   }
 
   function signOut() {
@@ -341,21 +468,21 @@ export default function App() {
     setUser(null);
     setJobs([]);
     setTrackJobId(null);
+    window.history.replaceState({}, "", "/");
   }
 
   if (!token || !user) {
     return (
-      <div className="app">
-        <div className="app-shell stack">
-          <CustomerAuth
-            onAuthed={(accessToken, nextUser) => {
-              writeStoredToken(accessToken);
-              setToken(accessToken);
-              setUser(nextUser);
-              setNotice("Signed in.");
-            }}
-          />
-        </div>
+      <div className="app auth-mode">
+        <CustomerAuth
+          onAuthed={(accessToken, nextUser) => {
+            writeStoredToken(accessToken);
+            setToken(accessToken);
+            setUser(nextUser);
+            setNotice("Signed in.");
+            go({ screen: "home" }, { replace: true });
+          }}
+        />
       </div>
     );
   }
@@ -452,7 +579,7 @@ export default function App() {
                   </select>
                 </div>
                 <div className="row">
-                  <button className="btn btn-ghost" onClick={() => setBooking(false)}>
+                  <button className="btn btn-ghost" onClick={goBack}>
                     Cancel
                   </button>
                   <button className="btn btn-primary" disabled={busy} onClick={submitRoute}>
@@ -485,7 +612,7 @@ export default function App() {
                 </div>
                 <p className="muted">You confirm this is not prohibited goods.</p>
                 <div className="row">
-                  <button className="btn btn-ghost" onClick={() => setBookStep("route")}>
+                  <button className="btn btn-ghost" onClick={goBack}>
                     Back
                   </button>
                   <button className="btn btn-primary" disabled={busy} onClick={submitPackage}>
@@ -510,7 +637,7 @@ export default function App() {
                 </p>
                 <p className="muted">You’ll confirm and pay on this step.</p>
                 <div className="row">
-                  <button className="btn btn-ghost" onClick={() => setBookStep("package")}>
+                  <button className="btn btn-ghost" onClick={goBack}>
                     Back
                   </button>
                   <button className="btn btn-primary" disabled={busy} onClick={submitConfirm}>
@@ -531,8 +658,8 @@ export default function App() {
                 <button
                   className="btn btn-secondary btn-block"
                   onClick={() => {
-                    setBooking(false);
                     setDraftJob(null);
+                    go({ screen: "home" });
                   }}
                 >
                   Done
@@ -547,11 +674,7 @@ export default function App() {
             <p className="muted" style={{ margin: 0 }}>
               Loading delivery…
             </p>
-            <button className="btn btn-ghost" type="button" onClick={() => {
-              setTrackJobId(null);
-              setTrackJob(null);
-              setProjection(null);
-            }}>
+            <button className="btn btn-ghost" type="button" onClick={goBack}>
               Back
             </button>
           </div>
@@ -568,11 +691,7 @@ export default function App() {
             mutationZone={mutationZone}
             setMutationAddress={setMutationAddress}
             setMutationZone={setMutationZone}
-            onBack={() => {
-              setTrackJobId(null);
-              setTrackJob(null);
-              setProjection(null);
-            }}
+            onBack={goBack}
             onMutation={handleMutation}
             onCancel={handleCancel}
           />
@@ -668,10 +787,7 @@ export default function App() {
                 <div className="stack">
                   <button
                     className="btn btn-ghost"
-                    onClick={() => {
-                      setActiveCaseId(null);
-                      setCaseThread(null);
-                    }}
+                    onClick={goBack}
                   >
                     ← Back
                   </button>
@@ -736,11 +852,7 @@ export default function App() {
           className={tab === "home" ? "active" : ""}
           onClick={() => {
             if (booking && !window.confirm("Leave this booking?")) return;
-            setTab("home");
-            setBooking(false);
-            setTrackJobId(null);
-            setTrackJob(null);
-            setProjection(null);
+            go({ screen: "home" });
           }}
         >
           Home
@@ -748,7 +860,7 @@ export default function App() {
         <button
           className={tab === "activity" ? "active" : ""}
           onClick={() => {
-            setTab("activity");
+            go({ screen: "activity" });
             if (token) void refreshJobs(token);
           }}
         >
@@ -757,14 +869,16 @@ export default function App() {
         <button
           className={tab === "support" ? "active" : ""}
           onClick={() => {
-            setTab("support");
-            setActiveCaseId(null);
+            go({ screen: "support" });
             if (token) void refreshCases(token);
           }}
         >
           Support
         </button>
-        <button className={tab === "profile" ? "active" : ""} onClick={() => setTab("profile")}>
+        <button
+          className={tab === "profile" ? "active" : ""}
+          onClick={() => go({ screen: "profile" })}
+        >
           Profile
         </button>
       </nav>

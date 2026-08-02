@@ -73,7 +73,7 @@ export async function loginWithPassword(email: string, password: string) {
     session?: { accessToken: string };
     user?: SessionUser;
   }>("/v1/auth/password/login", {
-    body: { email, password },
+    body: { email, password, portal: "enterprise" },
   });
 }
 

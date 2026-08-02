@@ -190,7 +190,7 @@ export async function loginPassword(identifier: string, password: string) {
     user: SessionUser;
     profile?: DriverProfile | null;
   }>("/v1/auth/password/login", {
-    body: { identifier, password },
+    body: { identifier, password, portal: "driver" },
   });
 }
 

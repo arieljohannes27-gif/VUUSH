@@ -28,7 +28,6 @@ import {
   pingSignal,
   readGps,
   rejectAssignment,
-  requestOtp,
   setDuty,
   signupDriver,
   startTracking,
@@ -40,8 +39,8 @@ import {
   type EarningLine,
   type Job,
   type SessionUser,
-  verifyOtp,
 } from "./api";
+import { humanAuthError } from "../../../src/shared/auth/messages";
 import { startOfferAlert, stopOfferAlert, unlockOfferAudio, OFFER_ALERT_MS } from "./offerSound";
 import {
   composeSaPhone,
@@ -182,7 +181,6 @@ export default function App() {
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
-  const [signupMode, setSignupMode] = useState(false);
   const [signupStep, setSignupStep] = useState(1);
   const [proofNote, setProofNote] = useState("");
   const [failReason, setFailReason] = useState("customer_unavailable");
@@ -453,15 +451,9 @@ export default function App() {
           ? "Add a short pickup proof note first."
           : raw === "delivery_note_required"
             ? "Add a delivery / signature note first."
-            : raw === "otp_delivery_failed" || raw === "otp_email_not_configured"
-              ? "We couldn’t email your code. Use the same Gmail as your Resend account, or sign in with password if you already submitted."
-              : raw === "login_incomplete"
-                ? "Sign-in almost finished — tap Confirm again after the next update, or sign in with your password."
-              : raw === "email_taken"
-                ? "That email already has an account. Sign in instead."
-                : raw === "Failed to fetch" || raw.startsWith("request_failed_")
-                  ? "Upload failed — try smaller/clearer photos (not huge PDFs), then tap Continue again."
-                  : raw;
+            : raw === "Failed to fetch" || raw.startsWith("request_failed_")
+              ? "Upload failed — try smaller/clearer photos (not huge PDFs), then tap Continue again."
+              : humanAuthError(raw);
       setError(human);
     } finally {
       setBusy(false);
@@ -502,7 +494,6 @@ export default function App() {
       setChallengeId(res.challengeId);
       setDevCode(res.devCode ?? null);
       if (res.devCode) setOtp(res.devCode);
-      setSignupMode(true);
       setAuthView("verify");
       setNotice("We sent a code to confirm your email.");
     });
@@ -512,6 +503,9 @@ export default function App() {
     await run(async () => {
       await unlockOfferAudio();
       const res = await loginPassword(email.trim(), password);
+      if (res.status !== "authenticated" || !res.session?.accessToken) {
+        throw new Error("unable_to_sign_in");
+      }
       writeStoredToken(res.session.accessToken);
       setToken(res.session.accessToken);
       setUser(res.user);
@@ -522,49 +516,20 @@ export default function App() {
     });
   }
 
-  async function handleRequestOtp() {
-    await run(async () => {
-      const res = await requestOtp(email.trim());
-      setChallengeId(res.challengeId);
-      setDevCode(res.devCode ?? null);
-      if (res.devCode) setOtp(res.devCode);
-      setSignupMode(false);
-      setAuthView("verify");
-    });
-  }
-
   async function handleVerifyOtp() {
     if (!challengeId) return;
     await run(async () => {
       await unlockOfferAudio();
-      if (signupMode) {
-        const res = await verifyDriverSignup(challengeId, otp.trim());
-        if (!res.session?.accessToken || !res.user) {
-          throw new Error("login_incomplete");
-        }
-        writeStoredToken(res.session.accessToken);
-        setToken(res.session.accessToken);
-        setUser(res.user);
-        if (res.profile) setProfile(res.profile);
-        await refresh(res.session.accessToken);
-        setNotice("Application received — waiting for approval.");
-        return;
-      }
-      const res = await verifyOtp(challengeId, otp.trim());
+      const res = await verifyDriverSignup(challengeId, otp.trim());
       if (!res.session?.accessToken || !res.user) {
-        throw new Error("login_incomplete");
+        throw new Error("unable_to_sign_in");
       }
       writeStoredToken(res.session.accessToken);
       setToken(res.session.accessToken);
       setUser(res.user);
-      try {
-        await ensureDriver(res.user.id);
-      } catch {
-        /* new applicants use password signup */
-      }
+      if (res.profile) setProfile(res.profile);
       await refresh(res.session.accessToken);
-      offerArmedRef.current = true;
-      setNotice("You’re signed in.");
+      setNotice("Application received — waiting for approval.");
     });
   }
 
@@ -910,14 +875,6 @@ export default function App() {
                   onClick={handlePasswordLogin}
                 >
                   Sign in
-                </button>
-                <button
-                  className="btn btn-ghost btn-block"
-                  type="button"
-                  disabled={busy}
-                  onClick={handleRequestOtp}
-                >
-                  Use email code instead
                 </button>
                 <button
                   className="btn btn-ghost btn-block"

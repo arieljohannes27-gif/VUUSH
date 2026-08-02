@@ -80,7 +80,8 @@ export async function findUserByEmailOrPhone(identifier: string) {
 
 /**
  * Unified password login for Driver, Customer, Enterprise, and Staff.
- * Staff always get MFA challenge — never a satisfied session without TOTP.
+ * Staff portals (Admin/Dispatch) always get MFA when roles require it.
+ * Consumer portals never see MFA — no tickets, no enroll prompts.
  */
 export async function loginWithPassword(input: {
   identifier: string;
@@ -90,6 +91,11 @@ export async function loginWithPassword(input: {
   correlationId?: string;
   /** When set, only these roles may complete login (portal gates). */
   requireAnyRole?: string[];
+  /**
+   * Portal that is signing in. Consumer portals never receive MFA challenges.
+   * Staff portals keep mandatory MFA for privileged roles.
+   */
+  portal?: "customer" | "driver" | "enterprise" | "admin" | "dispatch";
 }) {
   const user = await findUserByEmailOrPhone(input.identifier);
   if (!user?.passwordHash) {
@@ -120,7 +126,11 @@ export async function loginWithPassword(input: {
     return { ok: false as const, error: "forbidden" };
   }
 
-  const staff = requiresStaffMfa(roles);
+  const consumerPortal =
+    input.portal === "customer" ||
+    input.portal === "driver" ||
+    input.portal === "enterprise";
+  const staff = !consumerPortal && requiresStaffMfa(roles);
 
   if (staff && user.totpEnabled && user.totpSecret) {
     const ticket = await createMfaTicket(user.id, "totp_login");
@@ -131,7 +141,7 @@ export async function loginWithPassword(input: {
       subjectType: "user",
       subjectId: user.id,
       correlationId: input.correlationId,
-      payload: { via: "password" },
+      payload: { via: "password", portal: input.portal ?? "staff" },
     });
     return {
       ok: true as const,
@@ -179,6 +189,7 @@ export async function loginWithPassword(input: {
     subjectType: "user",
     subjectId: user.id,
     correlationId: input.correlationId,
+    payload: { portal: input.portal ?? "default" },
   });
 
   return {

@@ -467,3 +467,240 @@ h3 {
   filter: drop-shadow(0 0 4px rgba(27, 77, 255, 0.45));
 }
 
+  /* —— Customer auth (consumer) —— */
+
+.app.auth-mode {
+  padding-bottom: var(--space-xl);
+  max-width: 440px;
+}
+
+.auth-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(28px, 6vh, 48px) var(--space-md) var(--space-xl);
+  animation: rise 420ms var(--motion) both;
+}
+
+.auth-header {
+  margin-bottom: var(--space-lg);
+}
+
+.auth-header .brand-lockup {
+  margin-bottom: var(--space-lg);
+}
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 5vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-primary);
+}
+
+.auth-lede {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 1.5;
+  max-width: 32ch;
+}
+
+.auth-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: var(--space-lg);
+  background: var(--color-bg-subtle, #f3f2ef);
+  border-radius: 14px;
+}
+
+.auth-switch button {
+  border: 0;
+  background: transparent;
+  min-height: 44px;
+  border-radius: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  transition: background 160ms var(--motion), color 160ms var(--motion);
+}
+
+.auth-switch button.active {
+  background: var(--color-bg-elevated, #fff);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-password-wrap {
+  position: relative;
+}
+
+.auth-password-wrap .field {
+  padding-right: 72px;
+}
+
+.auth-show-pass {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.auth-remember input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.auth-link {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  min-height: 40px;
+  padding: 0;
+  align-self: flex-start;
+}
+
+.auth-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fee4e2;
+  color: var(--color-danger);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.auth-notice {
+  margin: 0 0 var(--space-md);
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #e8f2ec;
+  color: var(--color-success);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.auth-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.auth-hint.warn {
+  color: var(--color-danger);
+}
+
+.auth-strength {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-strength-bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.auth-strength-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.auth-strength-bar.on.s1 {
+  background: #d92d20;
+}
+.auth-strength-bar.on.s2 {
+  background: #dc6803;
+}
+.auth-strength-bar.on.s3 {
+  background: #079455;
+}
+.auth-strength-bar.on.s4 {
+  background: #079455;
+}
+
+.auth-strength-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.auth-strength-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.auth-strength-list li::before {
+  content: "○ ";
+}
+
+.auth-strength-list li.ok {
+  color: var(--color-success);
+}
+
+.auth-strength-list li.ok::before {
+  content: "● ";
+}
+
+.auth-trust {
+  margin-top: auto;
+  padding-top: var(--space-xl);
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   completePasswordReset,
   loginWithPassword,
@@ -11,9 +11,95 @@ import {
   evaluatePassword,
   humanAuthError,
   passwordStrengthLabel,
+  type PasswordCheck,
 } from "@vuush/auth";
 
 type Mode = "signin" | "register" | "forgot";
+type ForgotStep = "ask" | "code" | "done";
+
+const REMEMBER_KEY = "vuush.customer.remember_id";
+
+function looksLikePhone(value: string) {
+  const v = value.trim();
+  return !v.includes("@") && /\d{7,}/.test(v.replace(/[\s()+-]/g, ""));
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  required,
+  minLength,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  required?: boolean;
+  minLength?: number;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="auth-field">
+      <label className="label" htmlFor={id}>
+        {label}
+      </label>
+      <div className="auth-password-wrap">
+        <input
+          id={id}
+          className="field"
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          required={required}
+          minLength={minLength}
+        />
+        <button
+          type="button"
+          className="auth-show-pass"
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? "Hide password" : "Show password"}
+        >
+          {show ? "Hide" : "Show"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StrengthMeter({ check }: { check: PasswordCheck }) {
+  if (!check.checks.length && check.score === 0) return null;
+  return (
+    <div className="auth-strength" aria-live="polite">
+      <div className="auth-strength-bars" aria-hidden="true">
+        {[1, 2, 3, 4].map((n) => (
+          <span
+            key={n}
+            className={
+              check.score >= n
+                ? `auth-strength-bar on s${check.score}`
+                : "auth-strength-bar"
+            }
+          />
+        ))}
+      </div>
+      <p className="auth-strength-label">
+        {passwordStrengthLabel(check.score)}
+      </p>
+      <ul className="auth-strength-list">
+        <li className={check.checks.length ? "ok" : ""}>12+ characters</li>
+        <li className={check.checks.upper ? "ok" : ""}>Uppercase letter</li>
+        <li className={check.checks.lower ? "ok" : ""}>Lowercase letter</li>
+        <li className={check.checks.digit ? "ok" : ""}>Number</li>
+        <li className={check.checks.special ? "ok" : ""}>Special character</li>
+      </ul>
+    </div>
+  );
+}
 
 export function CustomerAuth({
   onAuthed,
@@ -23,7 +109,14 @@ export function CustomerAuth({
   const [mode, setMode] = useState<Mode>("signin");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [identifier, setIdentifier] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const [identifier, setIdentifier] = useState(
+    () => localStorage.getItem(REMEMBER_KEY) ?? "",
+  );
+  const [remember, setRemember] = useState(
+    () => Boolean(localStorage.getItem(REMEMBER_KEY)),
+  );
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -31,6 +124,8 @@ export function CustomerAuth({
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmNew, setConfirmNew] = useState("");
+  const [forgotStep, setForgotStep] = useState<ForgotStep>("ask");
 
   const strength = useMemo(
     () =>
@@ -39,6 +134,23 @@ export function CustomerAuth({
       ),
     [mode, newPassword, password],
   );
+
+  const confirmMatch =
+    mode === "register"
+      ? confirm.length === 0 || confirm === password
+      : confirmNew.length === 0 || confirmNew === newPassword;
+
+  useEffect(() => {
+    setError(null);
+    if (mode !== "forgot") {
+      setForgotStep("ask");
+      setChallengeId(null);
+      setOtp("");
+      setDevCode(null);
+      setNewPassword("");
+      setConfirmNew("");
+    }
+  }, [mode]);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -52,54 +164,78 @@ export function CustomerAuth({
     }
   }
 
-  const isPhone = !identifier.includes("@") && /\d/.test(identifier);
+  function switchMode(next: Mode) {
+    setMode(next);
+    setNotice(null);
+    setError(null);
+    setChallengeId(null);
+    setOtp("");
+    setDevCode(null);
+    setPassword("");
+    setConfirm("");
+  }
+
+  const title =
+    mode === "register"
+      ? "Create your account"
+      : mode === "forgot"
+        ? forgotStep === "done"
+          ? "Password updated"
+          : "Reset your password"
+        : "Welcome back";
+
+  const lede =
+    mode === "register"
+      ? challengeId
+        ? "We sent a short code. Enter it once to activate your account."
+        : "A few details and you’re ready to book."
+      : mode === "forgot"
+        ? forgotStep === "ask"
+          ? "Enter the email or mobile number on your account."
+          : forgotStep === "code"
+            ? "Enter the code we sent, then choose a new password."
+            : "You’re all set. Sign in with your new password."
+        : "Sign in to book and track your deliveries.";
 
   return (
-    <main className="auth">
-      <p className="brand-lockup">
-        <span className="brand-mark" aria-hidden="true" />
-        <span className="brand-wordmark">VUUSH</span>
-      </p>
-      <h1>
-        {mode === "register"
-          ? "Create account"
-          : mode === "forgot"
-            ? "Reset password"
-            : "Sign in"}
-      </h1>
-      <p className="lede">
-        {mode === "register"
-          ? "Email or phone, password, and a one-time verification code."
-          : mode === "forgot"
-            ? "We send a code so you can choose a new password."
-            : "Sign in with email or phone and your password. No authenticator."}
-      </p>
+    <main className="auth-screen">
+      <header className="auth-header">
+        <p className="brand-lockup">
+          <span className="brand-mark" aria-hidden="true" />
+          <span className="brand-wordmark">VUUSH</span>
+        </p>
+        <h1 className="auth-title">{title}</h1>
+        <p className="auth-lede">{lede}</p>
+      </header>
 
       {mode !== "forgot" ? (
-        <div className="auth-tabs" role="tablist">
+        <div className="auth-switch" role="tablist" aria-label="Account">
           <button
             type="button"
-            className={mode === "signin" ? "nav-item active" : "nav-item"}
-            onClick={() => setMode("signin")}
+            role="tab"
+            aria-selected={mode === "signin"}
+            className={mode === "signin" ? "active" : ""}
+            onClick={() => switchMode("signin")}
           >
             Sign in
           </button>
           <button
             type="button"
-            className={mode === "register" ? "nav-item active" : "nav-item"}
-            onClick={() => {
-              setMode("register");
-              setChallengeId(null);
-            }}
+            role="tab"
+            aria-selected={mode === "register"}
+            className={mode === "register" ? "active" : ""}
+            onClick={() => switchMode("register")}
           >
-            Register
+            Create account
           </button>
         </div>
       ) : null}
 
+      {notice ? <p className="auth-notice">{notice}</p> : null}
+
       {mode === "signin" ? (
         <form
-          className="stack"
+          className="auth-form"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
@@ -109,69 +245,115 @@ export function CustomerAuth({
                 !res.session?.accessToken ||
                 !res.user
               ) {
-                throw new Error(res.status || "auth_failed");
+                throw new Error("unable_to_sign_in");
+              }
+              if (remember) {
+                localStorage.setItem(REMEMBER_KEY, identifier.trim());
+              } else {
+                localStorage.removeItem(REMEMBER_KEY);
               }
               onAuthed(res.session.accessToken, res.user);
             });
           }}
         >
-          <label className="label" htmlFor="id">
-            Email or phone
-          </label>
-          <input
-            id="id"
-            className="field"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            required
-            autoComplete="username"
-          />
-          <label className="label" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            className="field"
-            type="password"
+          <div className="auth-field">
+            <label className="label" htmlFor="signin-id">
+              Email or mobile number
+            </label>
+            <input
+              id="signin-id"
+              className="field"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              required
+              autoComplete="username"
+              inputMode={looksLikePhone(identifier) ? "tel" : "email"}
+              placeholder="name@email.com or +27…"
+            />
+          </div>
+          <PasswordField
+            id="signin-password"
+            label="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            onChange={setPassword}
             autoComplete="current-password"
+            required
           />
-          {error ? <p className="error">{humanAuthError(error)}</p> : null}
-          <button className="cta" type="submit" disabled={busy}>
-            Sign in
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            Remember me
+          </label>
+          {error ? (
+            <p className="auth-error" role="alert">
+              {humanAuthError(error)}
+            </p>
+          ) : null}
+          <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
           </button>
-          <button
-            type="button"
-            className="text-link"
-            onClick={() => setMode("forgot")}
-          >
-            Forgot password?
-          </button>
+          <div className="auth-links">
+            <button
+              type="button"
+              className="auth-link"
+              onClick={() => {
+                switchMode("forgot");
+                setForgotStep("ask");
+              }}
+            >
+              Forgot password?
+            </button>
+            <button
+              type="button"
+              className="auth-link"
+              onClick={() => switchMode("register")}
+            >
+              Create account
+            </button>
+          </div>
         </form>
       ) : null}
 
       {mode === "register" ? (
         <form
-          className="stack"
+          className="auth-form"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
               if (!challengeId) {
+                if (displayName.trim().length < 2) {
+                  throw new Error("validation_error");
+                }
                 if (password !== confirm) {
                   throw new Error("passwords_do_not_match");
                 }
                 if (!strength.ok) {
                   throw new Error(strength.code ?? "password_too_weak");
                 }
-                const body = isPhone
-                  ? { phone: identifier.trim(), password, displayName }
-                  : { email: identifier.trim(), password, displayName };
+                const id = identifier.trim();
+                const body = looksLikePhone(id)
+                  ? {
+                      phone: id,
+                      password,
+                      displayName: displayName.trim(),
+                    }
+                  : {
+                      email: id,
+                      password,
+                      displayName: displayName.trim(),
+                    };
                 const res = await registerCustomer(body);
                 setChallengeId(res.challengeId);
                 setDevCode(res.devCode ?? null);
                 if (res.devCode) setOtp(res.devCode);
+                setNotice(
+                  looksLikePhone(id)
+                    ? "Check your phone for a verification code."
+                    : "Check your email for a verification code.",
+                );
                 return;
               }
               const res = await verifyCustomerRegister(challengeId, otp.trim());
@@ -180,7 +362,7 @@ export function CustomerAuth({
                 !res.session?.accessToken ||
                 !res.user
               ) {
-                throw new Error(res.status || "auth_failed");
+                throw new Error(res.status || "invalid_code");
               }
               onAuthed(res.session.accessToken, res.user);
             });
@@ -188,161 +370,262 @@ export function CustomerAuth({
         >
           {!challengeId ? (
             <>
-              <label className="label" htmlFor="reg-id">
-                Email or phone
-              </label>
-              <input
-                id="reg-id"
-                className="field"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-              />
-              <label className="label" htmlFor="reg-name">
-                Your name
-              </label>
-              <input
-                id="reg-name"
-                className="field"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-              <label className="label" htmlFor="reg-password">
-                Password
-              </label>
-              <input
+              <div className="auth-field">
+                <label className="label" htmlFor="reg-name">
+                  Full name
+                </label>
+                <input
+                  id="reg-name"
+                  className="field"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required
+                  minLength={2}
+                  autoComplete="name"
+                  placeholder="Ada Lovelace"
+                />
+              </div>
+              <div className="auth-field">
+                <label className="label" htmlFor="reg-id">
+                  Email address or mobile number
+                </label>
+                <input
+                  id="reg-id"
+                  className="field"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                  autoComplete="username"
+                  placeholder="name@email.com or +27…"
+                />
+              </div>
+              <PasswordField
                 id="reg-password"
-                className="field"
-                type="password"
+                label="Password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
+                autoComplete="new-password"
                 required
                 minLength={12}
               />
-              <p className="meta">
-                Strength: {passwordStrengthLabel(strength.score)}
-              </p>
-              <label className="label" htmlFor="reg-confirm">
-                Confirm password
-              </label>
-              <input
+              <StrengthMeter check={strength} />
+              <PasswordField
                 id="reg-confirm"
-                className="field"
-                type="password"
+                label="Confirm password"
                 value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
+                onChange={setConfirm}
+                autoComplete="new-password"
                 required
                 minLength={12}
               />
+              {!confirmMatch ? (
+                <p className="auth-hint warn">Passwords do not match.</p>
+              ) : null}
             </>
           ) : (
             <>
-              <label className="label" htmlFor="reg-otp">
-                Verification code
-              </label>
-              <input
-                id="reg-otp"
-                className="field"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                required
-              />
-              {devCode ? <p className="meta">Dev code: {devCode}</p> : null}
+              <div className="auth-field">
+                <label className="label" htmlFor="reg-otp">
+                  Verification code
+                </label>
+                <input
+                  id="reg-otp"
+                  className="field"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code"
+                />
+              </div>
+              {devCode ? (
+                <p className="auth-hint">Dev code: {devCode}</p>
+              ) : null}
             </>
           )}
-          {error ? <p className="error">{humanAuthError(error)}</p> : null}
-          <button className="cta" type="submit" disabled={busy}>
-            {challengeId ? "Verify and continue" : "Send verification code"}
+          {error ? (
+            <p className="auth-error" role="alert">
+              {humanAuthError(error)}
+            </p>
+          ) : null}
+          <button
+            className="btn btn-primary btn-block"
+            type="submit"
+            disabled={busy || (!challengeId && (!strength.ok || !confirmMatch))}
+          >
+            {busy
+              ? "Working…"
+              : challengeId
+                ? "Verify and continue"
+                : "Create account"}
           </button>
+          {challengeId ? (
+            <button
+              type="button"
+              className="auth-link"
+              onClick={() => {
+                setChallengeId(null);
+                setOtp("");
+                setDevCode(null);
+                setNotice(null);
+              }}
+            >
+              Use a different email or number
+            </button>
+          ) : null}
         </form>
       ) : null}
 
-      {mode === "forgot" ? (
+      {mode === "forgot" && forgotStep !== "done" ? (
         <form
-          className="stack"
+          className="auth-form"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
-              if (!challengeId) {
+              if (forgotStep === "ask") {
                 const res = await startPasswordReset(identifier.trim());
                 setChallengeId(res.challengeId ?? "pending");
                 if (res.devCode) {
                   setDevCode(res.devCode);
                   setOtp(res.devCode);
                 }
+                setForgotStep("code");
+                setNotice(
+                  "If that account exists, we sent a verification code.",
+                );
                 return;
+              }
+              if (newPassword !== confirmNew) {
+                throw new Error("passwords_do_not_match");
               }
               if (!strength.ok) {
                 throw new Error(strength.code ?? "password_too_weak");
+              }
+              if (!challengeId || challengeId === "pending") {
+                throw new Error("challenge_invalid_or_expired");
               }
               await completePasswordReset({
                 challengeId,
                 code: otp.trim(),
                 newPassword,
               });
-              setMode("signin");
-              setChallengeId(null);
+              setForgotStep("done");
+              setNotice("Your password was updated.");
               setPassword("");
+              setOtp("");
+              setChallengeId(null);
             });
           }}
         >
-          <label className="label" htmlFor="forgot-id">
-            Email or phone
-          </label>
-          <input
-            id="forgot-id"
-            className="field"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            required
-            disabled={Boolean(challengeId)}
-          />
-          {challengeId ? (
-            <>
-              <label className="label" htmlFor="forgot-otp">
-                Code
+          {forgotStep === "ask" ? (
+            <div className="auth-field">
+              <label className="label" htmlFor="forgot-id">
+                Email or mobile number
               </label>
               <input
-                id="forgot-otp"
+                id="forgot-id"
                 className="field"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
+                autoComplete="username"
               />
-              {devCode ? <p className="meta">Dev code: {devCode}</p> : null}
-              <label className="label" htmlFor="forgot-new">
-                New password
-              </label>
-              <input
+            </div>
+          ) : (
+            <>
+              <div className="auth-field">
+                <label className="label" htmlFor="forgot-otp">
+                  Verification code
+                </label>
+                <input
+                  id="forgot-otp"
+                  className="field"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                />
+              </div>
+              {devCode ? (
+                <p className="auth-hint">Dev code: {devCode}</p>
+              ) : null}
+              <PasswordField
                 id="forgot-new"
-                className="field"
-                type="password"
+                label="New password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={setNewPassword}
+                autoComplete="new-password"
                 required
                 minLength={12}
               />
-              <p className="meta">
-                Strength: {passwordStrengthLabel(strength.score)}
-              </p>
+              <StrengthMeter check={strength} />
+              <PasswordField
+                id="forgot-confirm"
+                label="Confirm new password"
+                value={confirmNew}
+                onChange={setConfirmNew}
+                autoComplete="new-password"
+                required
+                minLength={12}
+              />
+              {!confirmMatch ? (
+                <p className="auth-hint warn">Passwords do not match.</p>
+              ) : null}
             </>
+          )}
+          {error ? (
+            <p className="auth-error" role="alert">
+              {humanAuthError(error)}
+            </p>
           ) : null}
-          {error ? <p className="error">{humanAuthError(error)}</p> : null}
-          <button className="cta" type="submit" disabled={busy}>
-            {challengeId ? "Save new password" : "Send reset code"}
+          <button
+            className="btn btn-primary btn-block"
+            type="submit"
+            disabled={
+              busy ||
+              (forgotStep === "code" && (!strength.ok || !confirmMatch))
+            }
+          >
+            {busy
+              ? "Working…"
+              : forgotStep === "ask"
+                ? "Send verification code"
+                : "Update password"}
           </button>
           <button
             type="button"
-            className="text-link"
-            onClick={() => {
-              setMode("signin");
-              setChallengeId(null);
-            }}
+            className="auth-link"
+            onClick={() => switchMode("signin")}
           >
             Back to sign in
           </button>
         </form>
       ) : null}
+
+      {mode === "forgot" && forgotStep === "done" ? (
+        <div className="auth-form">
+          <p className="auth-notice">
+            Your password was updated. You can sign in now.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            onClick={() => {
+              switchMode("signin");
+              setForgotStep("ask");
+              setNotice(null);
+            }}
+          >
+            Sign in
+          </button>
+        </div>
+      ) : null}
+
+      <p className="auth-trust">
+        Your information is encrypted and protected.
+      </p>
     </main>
   );
 }

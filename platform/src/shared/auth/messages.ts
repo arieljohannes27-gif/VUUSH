@@ -6,6 +6,8 @@
 export const AUTH_MESSAGES: Record<string, string> = {
   invalid_credentials: "Incorrect email or password.",
   incorrect_password: "Incorrect email or password.",
+  unable_to_sign_in: "Unable to sign in. Please try again.",
+  auth_failed: "Unable to sign in. Please try again.",
   user_inactive: "Your account has been disabled.",
   account_pending: "Your account is awaiting approval.",
   account_rejected: "Your application was not approved.",
@@ -16,8 +18,8 @@ export const AUTH_MESSAGES: Record<string, string> = {
   password_too_weak:
     "Password needs uppercase, lowercase, a number, and a special character.",
   passwords_do_not_match: "Passwords do not match.",
-  email_taken: "That email already has an account. Sign in instead.",
-  phone_taken: "That phone number already has an account. Sign in instead.",
+  email_taken: "This email address is already registered. Sign in instead.",
+  phone_taken: "This mobile number is already registered. Sign in instead.",
   org_name_taken: "That company name is already registered.",
   no_org_membership:
     "This account is not linked to a company yet. Contact your VUUSH account manager.",
@@ -26,25 +28,26 @@ export const AUTH_MESSAGES: Record<string, string> = {
     "Enterprise access is set up after review. Submit an application or contact sales.",
   invalid_code: "That verification code is wrong.",
   challenge_invalid_or_expired:
-    "The verification code has expired. Please request a new code.",
+    "Your verification code has expired. Please request a new one.",
   challenge_locked: "Too many attempts. Please request a new code.",
   otp_delivery_failed: "We could not send the verification code. Try again.",
   otp_email_not_configured: "Email verification is not configured yet.",
   otp_sms_not_configured: "SMS verification is not configured yet.",
+  /** Staff consoles only — consumer apps must never surface these codes. */
   mfa_required: "Enter the code from your authenticator app.",
   mfa_enroll_required: "Set up your authenticator app to continue.",
   mfa_ticket_invalid: "That security step expired. Sign in again.",
   mfa_code_invalid: "That authenticator code is wrong. Try again.",
-  validation_error: "Please check the form and try again.",
+  validation_error: "Please check your details and try again.",
   unauthorized: "Please sign in again.",
   forbidden: "You do not have access to this.",
   not_found: "We could not find that account.",
   rate_limited: "Too many tries. Wait a moment and try again.",
   internal_error: "Something went wrong. Please try again.",
-  login_incomplete: "Sign-in did not finish. Please try again.",
-  reset_token_invalid: "That reset link is invalid or expired. Request a new one.",
-  password_reset_sent:
-    "If that account exists, we sent a verification code.",
+  login_incomplete: "Unable to sign in. Please try again.",
+  reset_token_invalid:
+    "That reset link is invalid or expired. Request a new one.",
+  password_reset_sent: "If that account exists, we sent a verification code.",
   company_doc_invalid: "Upload a PDF or image for the company document.",
 };
 
@@ -53,12 +56,12 @@ export function humanAuthError(code: string | null | undefined): string {
   const normalized = code.trim();
   if (AUTH_MESSAGES[normalized]) return AUTH_MESSAGES[normalized];
   if (normalized.startsWith("mfa_")) {
-    return "Complete authenticator setup to continue.";
+    return AUTH_MESSAGES.mfa_required;
   }
   if (normalized.includes(" ") && !normalized.includes("_")) {
     return normalized;
   }
-  return "Something went wrong. Please try again.";
+  return AUTH_MESSAGES.unable_to_sign_in;
 }
 
 /** Map raw user.status to a login error code. */

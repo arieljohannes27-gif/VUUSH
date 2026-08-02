@@ -164,6 +164,9 @@ export async function identityRoutes(app: FastifyInstance) {
         email: z.string().min(3).max(320).optional(),
         identifier: z.string().min(3).max(320).optional(),
         password: z.string().min(1).max(200),
+        portal: z
+          .enum(["customer", "driver", "enterprise", "admin", "dispatch"])
+          .optional(),
       })
       .safeParse(request.body);
     if (!parsed.success) {
@@ -182,6 +185,7 @@ export async function identityRoutes(app: FastifyInstance) {
     const result = await loginWithPassword({
       identifier,
       password: parsed.data.password,
+      portal: parsed.data.portal,
       ipAddress: request.ip,
       userAgent: request.headers["user-agent"],
       correlationId: request.id,

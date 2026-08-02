@@ -47,7 +47,7 @@ export async function loginWithPassword(email: string, password: string) {
     totpSecret?: string;
     totpOtpauth?: string;
   }>("/v1/auth/password/login", {
-    body: { email, password },
+    body: { email, password, portal: "admin" },
   });
 }
 

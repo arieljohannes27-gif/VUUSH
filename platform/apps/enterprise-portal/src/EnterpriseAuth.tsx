@@ -96,12 +96,12 @@ export function EnterpriseAuth({
         </h1>
         <p className="lede">
           {mode === "apply"
-            ? "Submit your company details. VUUSH Admin reviews every application. No authenticator."
+            ? "Submit your company details. VUUSH Admin reviews every application."
             : mode === "forgot"
               ? "We will email a code so you can choose a new password."
               : mode === "pending"
                 ? "We will email you when your company is approved. Then sign in with your work email and password."
-                : "Contracted organisations sign in with work email and password. No MFA."}
+                : "Sign in with your work email and password."}
         </p>
 
         {mode === "signin" || mode === "apply" ? (
@@ -153,16 +153,10 @@ export function EnterpriseAuth({
               void run(async () => {
                 const res = await loginWithPassword(email.trim(), password);
                 if (
-                  res.status === "mfa_required" ||
-                  res.status === "mfa_enroll_required"
-                ) {
-                  throw new Error("mfa_required");
-                }
-                if (
                   res.status !== "authenticated" ||
                   !res.session?.accessToken
                 ) {
-                  throw new Error(res.status || "auth_failed");
+                  throw new Error("unable_to_sign_in");
                 }
                 await onAuthed(res.session.accessToken, null);
               });
